@@ -33,15 +33,22 @@ uses
 const
   DokanLibrary = 'dokan.dll';
 
+  DOKAN_VERSION	 =	730;
+
+  DOKAN_OPTION_DEBUG	=	1; // ouput debug message
+  DOKAN_OPTION_STDERR	=	2 ;// ouput debug message to stderr
+  DOKAN_OPTION_ALT_STREAM	=4 ;// use alternate stream
+  DOKAN_OPTION_KEEP_ALIVE=	8; // use auto unmount
+  DOKAN_OPTION_NETWORK	=16 ;// use network drive, you need to install Dokan network provider.
+  DOKAN_OPTION_REMOVABLE =	32; // use removable drive
+
 type
   _DOKAN_OPTIONS = packed record
-    DriveLetter: WCHAR;     // Drive letter to be mounted
+    Version : Word;
     ThreadCount: Word;      // Number of threads to be used
-    DebugMode: Boolean;     // Ouput debug message
-    UseStdErr: Boolean;     // Ouput debug message to stderr
-    UseAltStream: Boolean;  // Use alternate stream
-    UseKeepAlive: Boolean;  // Use auto unmount
+    Options: UInt;     // Ouput debug message
     GlobalContext: Int64;   // User-mode filesystem can use this variable
+    MountPoint: LPCWSTR;     // Drive letter to be mounted
   end;
   PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
   DOKAN_OPTIONS = _DOKAN_OPTIONS;
@@ -52,11 +59,16 @@ type
   _DOKAN_FILE_INFO = packed record
     Context: Int64;         // User-mode filesystem can use this variable
     DokanContext: Int64;    // Reserved. Don't touch this!
-    ProcessId: ULONG;       // Process id for the thread that originally requested the I/O operation
-    IsDirectory: Boolean;   // Indicates a directory file
-    DeleteOnClose: Boolean; // Delete when Cleanup is called
-    DokanOptions: PDOKAN_OPTIONS;
+    DokanOptions : PDOKAN_OPTIONS; // A pointer to DOKAN_OPTIONS which was  passed to DokanMain.
+    ProcessId: ULONG;       // process id for the thread that originally requested a given I/O operation
+    IsDirectory: Boolean;   // requesting a directory file
+    DeleteOnClose: Boolean; // Delete on when "cleanup" is called
+    PagingIo: Boolean;	// Read or write is paging IO.
+    SynchronousIo: Boolean;  // Read or write is synchronous IO.
+    Nocache: Boolean;
+    WriteToEndOfFile: Boolean; //  If true, write to the current end of file instead of Offset parameter.
   end;
+
   PDOKAN_FILE_INFO = ^_DOKAN_FILE_INFO;
   DOKAN_FILE_INFO = _DOKAN_FILE_INFO;
 
@@ -158,12 +170,16 @@ type
                                 Length: LONGLONG;
                                 var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
+  TDokanSetAllocationSize = function(FileName: LPCWSTR;
+                                Length: LONGLONG;
+                                var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+
   TDokanLockFile = function(FileName: LPCWSTR;
-                            Offset, Length: LONGLONG;
+                            ByteOffset, Length: LONGLONG;
                             var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
   TDokanUnlockFile = function(FileName: LPCWSTR;
-                              Offset, Length: LONGLONG;
+                              ByteOffset, Length: LONGLONG;
                               var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
 // Neither GetDiskFreeSpace nor GetVolumeInformation will save the value of
@@ -185,6 +201,19 @@ type
 
   TDokanUnmount = function(var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
+  TDokanGetFileSecurity = function(FileName: LPCWSTR;
+                                      var SecurityInformation : SECURITY_INFORMATION;
+                                      var SecurityDescriptor : SECURITY_DESCRIPTOR;
+                                      LengthOfSecurityDescriptorBuffer : ULONG;
+                                      var LengthNeeded  : ULONG;
+                                      var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+
+  TDokanSetFileSecurity = function(FileName: LPCWSTR;
+                                    var SecurityInformation : SECURITY_INFORMATION;
+                                    var SecurityDescriptor : SECURITY_DESCRIPTOR;
+                                    SecurityDescriptorLength : ULONG;
+                                    var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+
   _DOKAN_OPERATIONS = packed record
     CreateFile: TDokanCreateFile;
     OpenDirectory: TDokanOpenDirectory;
@@ -203,8 +232,11 @@ type
     DeleteDirectory: TDokanDeleteDirectory;
     MoveFile: TDokanMoveFile;
     SetEndOfFile: TDokanSetEndOfFile;
+    SetAllocationSize : TDokanSetAllocationSize;
     LockFile: TDokanLockFile;
     UnlockFile: TDOkanUnlockFile;
+    GetFileSecurity: TDokanGetFileSecurity;
+    SetFileSecurity: TDokanSetFileSecurity;
     GetDiskFreeSpace: TDokanGetDiskFreeSpace;
     GetVolumeInformation:TDokanGetVolumeInformation;
     Unmount: TDokanUnmount;

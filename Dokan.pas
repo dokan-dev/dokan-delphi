@@ -47,7 +47,7 @@ type
     Version : Word;
     ThreadCount: Word;      // Number of threads to be used
     Options: UInt;     // Ouput debug message
-    GlobalContext: Int64;   // User-mode filesystem can use this variable
+    GlobalContext: UInt64;   // User-mode filesystem can use this variable
     MountPoint: LPCWSTR;     // Drive letter to be mounted
   end;
   PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
@@ -57,8 +57,8 @@ type
   PDokanOptions = PDOKAN_OPTIONS;
 
   _DOKAN_FILE_INFO = packed record
-    Context: Int64;         // User-mode filesystem can use this variable
-    DokanContext: Int64;    // Reserved. Don't touch this!
+    Context: UInt64;         // User-mode filesystem can use this variable
+    DokanContext: UInt64;    // Reserved. Don't touch this!
     DokanOptions : PDOKAN_OPTIONS; // A pointer to DOKAN_OPTIONS which was  passed to DokanMain.
     ProcessId: ULONG;       // process id for the thread that originally requested a given I/O operation
     IsDirectory: Boolean;   // requesting a directory file

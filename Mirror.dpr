@@ -90,6 +90,7 @@ begin
     DOKAN_DRIVER_INSTALL_ERROR: s := 'Cannot install driver';
     DOKAN_START_ERROR: s := 'Cannot start driver';
     DOKAN_MOUNT_ERROR: s := 'Cannot mount on the specified drive letter';
+    DOKAN_MOUNT_POINT_ERROR : s := 'Mount point error';
   else
     s := 'Unknown error';
   end;

@@ -33,15 +33,22 @@ uses
 const
   DokanLibrary = 'dokan.dll';
 
+  DOKAN_VERSION	 =	730;
+
+  DOKAN_OPTION_DEBUG    	=	1; // ouput debug message
+  DOKAN_OPTION_STDERR	    =	2; // ouput debug message to stderr
+  DOKAN_OPTION_ALT_STREAM	= 4; // use alternate stream
+  DOKAN_OPTION_KEEP_ALIVE =	8; // use auto unmount
+  DOKAN_OPTION_NETWORK	  =16; // use network drive, you need to install Dokan network provider.
+  DOKAN_OPTION_REMOVABLE  =32; // use removable drive
+
 type
   _DOKAN_OPTIONS = packed record
-    DriveLetter: WCHAR;     // Drive letter to be mounted
+    Version : Word;
     ThreadCount: Word;      // Number of threads to be used
-    DebugMode: Boolean;     // Ouput debug message
-    UseStdErr: Boolean;     // Ouput debug message to stderr
-    UseAltStream: Boolean;  // Use alternate stream
-    UseKeepAlive: Boolean;  // Use auto unmount
-    GlobalContext: Int64;   // User-mode filesystem can use this variable
+    Options: UInt;     // Ouput debug message
+    GlobalContext: UInt64;   // User-mode filesystem can use this variable
+    MountPoint: LPCWSTR;     // Drive letter to be mounted
   end;
   PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
   DOKAN_OPTIONS = _DOKAN_OPTIONS;
@@ -50,12 +57,16 @@ type
   PDokanOptions = PDOKAN_OPTIONS;
 
   _DOKAN_FILE_INFO = packed record
-    Context: Int64;         // User-mode filesystem can use this variable
-    DokanContext: Int64;    // Reserved. Don't touch this!
-    ProcessId: ULONG;       // Process id for the thread that originally requested the I/O operation
-    IsDirectory: Boolean;   // Indicates a directory file
-    DeleteOnClose: Boolean; // Delete when Cleanup is called
-    DokanOptions: PDOKAN_OPTIONS;
+    Context: UInt64;         // User-mode filesystem can use this variable
+    DokanContext: UInt64;    // Reserved. Don't touch this!
+    DokanOptions : PDOKAN_OPTIONS; // A pointer to DOKAN_OPTIONS which was  passed to DokanMain.
+    ProcessId: ULONG;       // process id for the thread that originally requested a given I/O operation
+    IsDirectory: Boolean;   // requesting a directory file
+    DeleteOnClose: Boolean; // Delete on when "cleanup" is called
+    PagingIo: Boolean;	// Read or write is paging IO.
+    SynchronousIo: Boolean;  // Read or write is synchronous IO.
+    Nocache: Boolean;
+    WriteToEndOfFile: Boolean; //  If true, write to the current end of file instead of Offset parameter.
   end;
   PDOKAN_FILE_INFO = ^_DOKAN_FILE_INFO;
   DOKAN_FILE_INFO = _DOKAN_FILE_INFO;
@@ -158,12 +169,16 @@ type
                                 Length: LONGLONG;
                                 var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
+  TDokanSetAllocationSize = function(FileName: LPCWSTR;
+                                Length: LONGLONG;
+                                var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+
   TDokanLockFile = function(FileName: LPCWSTR;
-                            Offset, Length: LONGLONG;
+                            ByteOffset, Length: LONGLONG;
                             var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
   TDokanUnlockFile = function(FileName: LPCWSTR;
-                              Offset, Length: LONGLONG;
+                              ByteOffset, Length: LONGLONG;
                               var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
 // Neither GetDiskFreeSpace nor GetVolumeInformation will save the value of
@@ -185,6 +200,19 @@ type
 
   TDokanUnmount = function(var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
+  TDokanGetFileSecurity = function(FileName: LPCWSTR;
+                                      var SecurityInformation : SECURITY_INFORMATION;
+                                      var SecurityDescriptor : SECURITY_DESCRIPTOR;
+                                      LengthOfSecurityDescriptorBuffer : ULONG;
+                                      var LengthNeeded  : ULONG;
+                                      var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+
+  TDokanSetFileSecurity = function(FileName: LPCWSTR;
+                                    var SecurityInformation : SECURITY_INFORMATION;
+                                    var SecurityDescriptor : SECURITY_DESCRIPTOR;
+                                    SecurityDescriptorLength : ULONG;
+                                    var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+
   _DOKAN_OPERATIONS = packed record
     CreateFile: TDokanCreateFile;
     OpenDirectory: TDokanOpenDirectory;
@@ -203,8 +231,11 @@ type
     DeleteDirectory: TDokanDeleteDirectory;
     MoveFile: TDokanMoveFile;
     SetEndOfFile: TDokanSetEndOfFile;
+    SetAllocationSize : TDokanSetAllocationSize;
     LockFile: TDokanLockFile;
     UnlockFile: TDOkanUnlockFile;
+    GetFileSecurity: TDokanGetFileSecurity;
+    SetFileSecurity: TDokanSetFileSecurity;
     GetDiskFreeSpace: TDokanGetDiskFreeSpace;
     GetVolumeInformation:TDokanGetVolumeInformation;
     Unmount: TDokanUnmount;
@@ -222,12 +253,24 @@ const
   DOKAN_DRIVER_INSTALL_ERROR = -3; // Cannot install driver
   DOKAN_START_ERROR          = -4; // Something is wrong with the driver
   DOKAN_MOUNT_ERROR          = -5; // Cannot assign the drive letter
+  DOKAN_MOUNT_POINT_ERROR    = -6; // Mountpoint is invalid
 
 function DokanMain(var Options: DOKAN_OPTIONS; var Operations: DOKAN_OPERATIONS): Integer; stdcall;
 function DokanUnmount(DriveLetter: WCHAR): BOOL; stdcall;
+function DokanRemoveMountPoint(MountPoint : LPCWSTR): BOOL; stdcall;
+// DokanIsNameInExpression
+// check whether Name can match Expression
+// Expression can contain wildcard characters (? and *)
 function DokanIsNameInExpression(Expression, Name: LPCWSTR; IgnoreCase: BOOL): Bool; stdcall;
 function DokanVersion: ULONG; stdcall;
 function DokanDriverVersion: ULONG; stdcall;
+// DokanResetTimeout
+// extends the time out of the current IO operation in driver.
+function DokanResetTimeout(Timeout : ULONG;var DokanFileInfo: DOKAN_FILE_INFO): Bool; stdcall;
+// Get the handle to Access Token
+// This method needs be called in CreateFile, OpenDirectory or CreateDirectly callback.
+// The caller must call CloseHandle for the returned handle.
+function DokanOpenRequestorToken(var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall;
 
 // For internal use only. Do not call these!
 function DokanServiceInstall(ServiceName: LPCWSTR; ServiceType: DWORD; ServiceFullPath: LPCWSTR): Bool; stdcall;
@@ -237,9 +280,12 @@ implementation
 
 function DokanMain; external DokanLibrary;
 function DokanUnmount; external DokanLibrary;
+function DokanRemoveMountPoint; external DokanLibrary;
 function DokanIsNameInExpression; external DokanLibrary;
 function DokanVersion; external DokanLibrary;
 function DokanDriverVersion; external DokanLibrary;
+function DokanResetTimeout; external DokanLibrary;
+function DokanOpenRequestorToken; external DokanLibrary;
 function DokanServiceInstall; external DokanLibrary;
 function DokanServiceDelete; external DokanLibrary;
 

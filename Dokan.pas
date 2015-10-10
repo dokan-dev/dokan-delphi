@@ -33,22 +33,33 @@ uses
 const
   DokanLibrary = 'dokan.dll';
 
-  DOKAN_VERSION	 =	730;
+  DOKAN_VERSION	 =	800;
 
   DOKAN_OPTION_DEBUG    	=	1; // ouput debug message
   DOKAN_OPTION_STDERR	    =	2; // ouput debug message to stderr
   DOKAN_OPTION_ALT_STREAM	= 4; // use alternate stream
-  DOKAN_OPTION_KEEP_ALIVE =	8; // use auto unmount
   DOKAN_OPTION_NETWORK	  =16; // use network drive, you need to install Dokan network provider.
   DOKAN_OPTION_REMOVABLE  =32; // use removable drive
 
 type
+  NTSTATUS = Longint;
+
+const
+  NTSTATUS_SUCCESS = NTSTATUS($00000000); // ntsubauth
+  NTSTATUS_INVALID_HANDLE = NTSTATUS($C0000008); // winnt
+  NTSTATUS_OBJECT_NAME_NOT_FOUND = NTSTATUS($C0000034);
+  NTSTATUS_OBJECT_PATH_NOT_FOUND = NTSTATUS($C000003A);
+  NTSTATUS_INVALID_PARAMETER = NTSTATUS($C000000D);
+  NTSTATUS_ACCESS_DENIED = NTSTATUS($C0000022);
+
+type
   _DOKAN_OPTIONS = packed record
-    Version : Word;
-    ThreadCount: Word;      // Number of threads to be used
-    Options: UInt;     // Ouput debug message
-    GlobalContext: UInt64;   // User-mode filesystem can use this variable
-    MountPoint: LPCWSTR;     // Drive letter to be mounted
+    Version : Word;       // Supported Dokan Version, ex. "530" (Dokan ver 0.5.3)
+    ThreadCount: Word;    // number of threads to be used internally by Dokan library
+    Options: UInt;        // combination of DOKAN_OPTIONS_*
+    GlobalContext: UInt64;// FileSystem can store anything here
+    MountPoint: LPCWSTR;  // mount point "M:\" (drive letter) or "C:\mount\dokan" (path in NTFS)
+    Timeout: UInt;        // IrpTimeout in milliseconds
   end;
   PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
   DOKAN_OPTIONS = _DOKAN_OPTIONS;
@@ -57,138 +68,139 @@ type
   PDokanOptions = PDOKAN_OPTIONS;
 
   _DOKAN_FILE_INFO = packed record
-    Context: UInt64;         // User-mode filesystem can use this variable
-    DokanContext: UInt64;    // Reserved. Don't touch this!
-    DokanOptions : PDOKAN_OPTIONS; // A pointer to DOKAN_OPTIONS which was  passed to DokanMain.
-    ProcessId: ULONG;       // process id for the thread that originally requested a given I/O operation
-    IsDirectory: Boolean;   // requesting a directory file
-    DeleteOnClose: Boolean; // Delete on when "cleanup" is called
-    PagingIo: Boolean;	// Read or write is paging IO.
-    SynchronousIo: Boolean;  // Read or write is synchronous IO.
+    Context: UInt64;               // FileSystem can store anything here
+    DokanContext: UInt64;          // Used internally, never modify
+    DokanOptions : PDOKAN_OPTIONS; // A pointer to DOKAN_OPTIONS which was passed to DokanMain.
+    ProcessId: ULONG;              // process id for the thread that originally requested a given I/O operation
+    IsDirectory: Boolean;          // requesting a directory file
+    DeleteOnClose: Boolean;        // Delete on when "cleanup" is called
+    PagingIo: Boolean;	           // Read or write is paging IO.
+    SynchronousIo: Boolean;        // Read or write is synchronous IO.
     Nocache: Boolean;
     WriteToEndOfFile: Boolean; //  If true, write to the current end of file instead of Offset parameter.
   end;
   PDOKAN_FILE_INFO = ^_DOKAN_FILE_INFO;
   DOKAN_FILE_INFO = _DOKAN_FILE_INFO;
 
-  TDokanFileInfo = _DOKAN_FILE_INFO;
+  TDokanFileInfo = _DOKAN_FILE_INFO;                                                     
   PDokanFileInfo = PDOKAN_FILE_INFO;
 
 type
-// When an error occurs, the following user-mode callbacks should return
-// negative values. Usually, you should return GetLastError() * -1.
+  // When an error occurs, return NTSTATUS (https://support.microsoft.com/en-us/kb/113996)
 
-// FillFileData is a client-side callback to enumerate a file list when
-// FindFiles is called. It is supposed to return 1 if buffer is full, 0
-// otherwise (currently it never returns 1)
+  // FillFindData
+  //   is used to add an entry in FindFiles                                              
+  //   returns 1 if buffer is full, otherwise 0
+  //   (currently it never returns 1)
   TDokanFillFindData = function(var FindData: WIN32_FIND_DATAW;
                                 var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
-// CreateFile may be called when FileName is the name of an existing directory.
-// In that case, CreateFile should return 0 if that directory can be opened and
-// you should set DokanFileInfo.IsDirectory to True.
-// When CreationDisposition is CREATE_ALWAYS or OPEN_ALWAYS and a file with the
-// same name already exists, you should return ERROR_ALREADY_EXISTS (183) (not
-// the negative value)
+	// CreateFile
+	//   If file is a directory, CreateFile (not OpenDirectory) may be called.
+	//   In this case, CreateFile should return STATUS_SUCCESS when that directory can be opened.
+	//   You should set TRUE on DokanFileInfo->IsDirectory when file is a directory.
   TDokanCreateFile = function(FileName: LPCWSTR;
                               DesiredAccess, ShareMode, CreationDisposition, FlagsAndAttributes: DWORD;
-                              var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                              var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanOpenDirectory = function(FileName: LPCWSTR;
-                                 var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                 var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanCreateDirectory = function(FileName: LPCWSTR;
-                                   var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                   var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
                                    
-// When FileInfo.DeleteOnClose is set to True, you must delete the file during
-// Cleanup.
-  TDokanCleanup = function(FileName: LPCWSTR;
-                           var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+	// When FileInfo->DeleteOnClose is true, you must delete the file in Cleanup.
+	// Refer to comment at DeleteFile definition below in this file for explanation.
+  TDokanCleanup = procedure (FileName: LPCWSTR;
+                           var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
 
-  TDokanCloseFile = function(FileName: LPCWSTR;
-                             var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+  TDokanCloseFile = procedure (FileName: LPCWSTR;
+                             var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
 
   TDokanReadFile = function(FileName: LPCWSTR;
                             var Buffer;
                             NumberOfBytesToRead: DWORD;
                             var NumberOfBytesRead: DWORD;
                             Offset: LONGLONG;
-                            var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                            var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanWriteFile = function(FileName: LPCWSTR;
                              var Buffer;
                              NumberOfBytesToWrite: DWORD;
                              var NumberOfBytesWritten: DWORD;
                              Offset: LONGLONG;
-                             var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                             var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanFlushFileBuffers = function(FileName: LPCWSTR;
-                                    var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanGetFileInformation = function(FileName: LPCWSTR;
                                       FileInformation: PByHandleFileInformation;
-                                      var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                      var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+
+	// You should implement either FindFiles or FindFilesWithPattern
 
   TDokanFindFiles = function(PathName: LPCWSTR;
                              // For each matched file, call this function with a filled PWIN32_FIND_DATAW structure
                              FillFindDataCallback: TDokanFillFindData;
-                             var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                             var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
-// You should implement either FindFiles or FindFilesWithPattern
   TDokanFindFilesWithPattern = function(PathName, SearchPattern: LPCWSTR;
                                         // For each matched file, call this function with a filled PWIN32_FIND_DATAW structure
                                         FillFindDataCallback: TDokanFillFindData;
-                                        var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                        var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanSetFileAttributes = function(FileName: LPCWSTR;
                                      FileAttributes: DWORD;
-                                     var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                     var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanSetFileTime = function(FileName: LPCWSTR;
                                CreationTime, LastAccessTime, LastWriteTime: PFileTime;
-                               var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                               var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
-// You should not delete any file or directory when DeleteFile or 
-// DeleteDirectory is called. Instead, you must check whether it can be deleted
-// or not, return 0 (ERROR_SUCCESS) if yes, or appropriate error codes such as
-// -ERROR_DIR_NOT_EMPTY, -ERROR_SHARING_VIOLATION... otherwise.
-// Returning 0 ensures that the Cleanup callback will be called later with
-// FileInfo.DeleteOnClose set to True, and you will be able to safely delete
-// the file at that time.
+	// You should not delete the file on DeleteFile or DeleteDirectory, but instead
+	// you must only check whether you can delete the file or not, 
+	// and return ERROR_SUCCESS (when you can delete it) or appropriate error codes such as 
+	// STATUS_ACCESS_DENIED, STATUS_OBJECT_PATH_NOT_FOUND, STATUS_OBJECT_NAME_NOT_FOUND.
+	// When you return ERROR_SUCCESS, you get a Cleanup call afterwards with
+	// FileInfo->DeleteOnClose set to TRUE and only then you have to actually delete
+	// the file being closed.
   TDokanDeleteFile = function(FileName: LPCWSTR;
-                              var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                              var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanDeleteDirectory = function(FileName: LPCWSTR;
-                                   var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                   var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanMoveFile = function(ExistingFileName, NewFileName: LPCWSTR;
                             ReplaceExisiting: BOOL;
-                            var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                            var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanSetEndOfFile = function(FileName: LPCWSTR;
                                 Length: LONGLONG;
-                                var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanSetAllocationSize = function(FileName: LPCWSTR;
                                 Length: LONGLONG;
-                                var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanLockFile = function(FileName: LPCWSTR;
                             ByteOffset, Length: LONGLONG;
-                            var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                            var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanUnlockFile = function(FileName: LPCWSTR;
                               ByteOffset, Length: LONGLONG;
-                              var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                              var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
-// Neither GetDiskFreeSpace nor GetVolumeInformation will save the value of
-// DokanFileContext.Context.
+	// Neither GetDiskFreeSpace nor GetVolumeInformation
+	// save the DokanFileContext->Context.
+	// Before these methods are called, CreateFile may not be called.
+	// (ditto CloseFile and Cleanup)
 
   ULONGLONG = ULARGE_INTEGER;
 
 // See Win32 API GetDiskFreeSpaceEx
   TDokanGetDiskFreeSpace = function(var FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes: ULONGLONG;
-                                    var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
 // See Win32 API GetVolumeInformation
   TDokanGetVolumeInformation = function(VolumeNameBuffer: LPWSTR;
@@ -196,22 +208,30 @@ type
                                         var VolumeSerialNumber, MaximumComponentLength, FileSystemFlags: DWORD;
                                         FileSystemNameBuffer: LPWSTR;
                                         FileSystemNameSize: DWORD;
-                                        var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                        var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
-  TDokanUnmount = function(var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+  TDokanUnmount = function(var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanGetFileSecurity = function(FileName: LPCWSTR;
                                       var SecurityInformation : SECURITY_INFORMATION;
                                       var SecurityDescriptor : SECURITY_DESCRIPTOR;
                                       LengthOfSecurityDescriptorBuffer : ULONG;
                                       var LengthNeeded  : ULONG;
-                                      var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                      var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   TDokanSetFileSecurity = function(FileName: LPCWSTR;
                                     var SecurityInformation : SECURITY_INFORMATION;
                                     var SecurityDescriptor : SECURITY_DESCRIPTOR;
                                     SecurityDescriptorLength : ULONG;
-                                    var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+                                    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+
+	// Supported since 0.8.0. You must specify the version at DOKAN_OPTIONS.Version.
+  TDokanEnumerateNamedStreams = function(FileName: LPCWSTR;
+                                    EnumContext : Pointer;
+                                    StreamName : LPWSTR;
+                                    var StreamNameLength  : ULONG;
+                                    StreamSize : LONGLONG;
+                                    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   _DOKAN_OPERATIONS = packed record
     CreateFile: TDokanCreateFile;
@@ -239,6 +259,7 @@ type
     GetDiskFreeSpace: TDokanGetDiskFreeSpace;
     GetVolumeInformation:TDokanGetVolumeInformation;
     Unmount: TDokanUnmount;
+    EnumerateNamedStreams : TDokanEnumerateNamedStreams;
   end;
   PDOKAN_OPERATIONS = ^_DOKAN_OPERATIONS;
   DOKAN_OPERATIONS = _DOKAN_OPERATIONS;
@@ -246,6 +267,7 @@ type
   TDokanOperations = _DOKAN_OPERATIONS;
   PDokanOperations = PDOKAN_OPERATIONS;
 
+// DokanMain returns error codes
 const
   DOKAN_SUCCESS              =  0;
   DOKAN_ERROR                = -1; // General error
@@ -272,10 +294,6 @@ function DokanResetTimeout(Timeout : ULONG;var DokanFileInfo: DOKAN_FILE_INFO): 
 // The caller must call CloseHandle for the returned handle.
 function DokanOpenRequestorToken(var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall;
 
-// For internal use only. Do not call these!
-function DokanServiceInstall(ServiceName: LPCWSTR; ServiceType: DWORD; ServiceFullPath: LPCWSTR): Bool; stdcall;
-function DokanServiceDelete(ServiceName: LPCWSTR): Bool; stdcall;
-
 implementation
 
 function DokanMain; external DokanLibrary;
@@ -286,7 +304,5 @@ function DokanVersion; external DokanLibrary;
 function DokanDriverVersion; external DokanLibrary;
 function DokanResetTimeout; external DokanLibrary;
 function DokanOpenRequestorToken; external DokanLibrary;
-function DokanServiceInstall; external DokanLibrary;
-function DokanServiceDelete; external DokanLibrary;
 
 end.

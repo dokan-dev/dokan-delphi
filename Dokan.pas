@@ -95,6 +95,17 @@ type
   TDokanFillFindData = function(var FindData: WIN32_FIND_DATAW;
                                 var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
 
+// FillFindStreamData
+//   is used to add an entry in FindStreams
+//   returns 1 if buffer is full, otherwise 0
+//   (currently it never returns 1)
+  WIN32_FIND_STREAM_DATA = packed record
+    StreamSize: LARGE_INTEGER;
+    cStreamName: array [0 .. (MAX_PATH + 36) - 1] of WCHAR;
+  end;
+  TDokanFillFindStreamData = function(var FindStreamData: WIN32_FIND_STREAM_DATA;
+                                      var DokanFileInfo: DOKAN_FILE_INFO): Integer; stdcall;
+
 	// CreateFile
 	//   If file is a directory, CreateFile (not OpenDirectory) may be called.
 	//   In this case, CreateFile should return STATUS_SUCCESS when that directory can be opened.
@@ -226,12 +237,9 @@ type
                                     var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
 	// Supported since 0.8.0. You must specify the version at DOKAN_OPTIONS.Version.
-  TDokanEnumerateNamedStreams = function(FileName: LPCWSTR;
-                                    EnumContext : Pointer;
-                                    StreamName : LPWSTR;
-                                    var StreamNameLength  : ULONG;
-                                    StreamSize : LONGLONG;
-                                    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+  TDokanFindStreams = function(FileName: LPCWSTR;
+                               FillFindStreamDataCallback: TDokanFillFindStreamData;
+                               var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
   _DOKAN_OPERATIONS = packed record
     CreateFile: TDokanCreateFile;
@@ -254,12 +262,12 @@ type
     SetAllocationSize : TDokanSetAllocationSize;
     LockFile: TDokanLockFile;
     UnlockFile: TDOkanUnlockFile;
-    GetFileSecurity: TDokanGetFileSecurity;
-    SetFileSecurity: TDokanSetFileSecurity;
     GetDiskFreeSpace: TDokanGetDiskFreeSpace;
     GetVolumeInformation:TDokanGetVolumeInformation;
     Unmount: TDokanUnmount;
-    EnumerateNamedStreams : TDokanEnumerateNamedStreams;
+    GetFileSecurity: TDokanGetFileSecurity;
+    SetFileSecurity: TDokanSetFileSecurity;
+    FindStreams: TDokanFindStreams;
   end;
   PDOKAN_OPERATIONS = ^_DOKAN_OPERATIONS;
   DOKAN_OPERATIONS = _DOKAN_OPERATIONS;

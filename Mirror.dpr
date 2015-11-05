@@ -729,12 +729,12 @@ var
     SetAllocationSize: nil;
     LockFile: MirrorLockFile;
     UnlockFile: MirrorUnlockFile;
-    GetFileSecurity: nil;
-    SetFileSecurity: nil;
     GetDiskFreeSpace: nil;
     GetVolumeInformation: nil;
     Unmount: MirrorUnmount;
-    EnumerateNamedStreams: nil
+    GetFileSecurity: nil;
+    SetFileSecurity: nil;
+    FindStreams: nil
   );
 
   g_DokanOptions: TDokanOptions = (

@@ -289,8 +289,8 @@ begin
   securityAttrib.bInheritHandle := False;
 
   DokanMapKernelToUserCreateFileFlags(
-      FileAttributes, CreateOptions, CreateDisposition, fileAttributesAndFlags,
-      creationDisposition);
+      FileAttributes, CreateOptions, CreateDisposition, @fileAttributesAndFlags,
+      @creationDisposition);
 
   GetFilePath(filePath, MAX_PATH, FileName);
 

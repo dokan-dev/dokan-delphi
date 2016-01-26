@@ -436,11 +436,11 @@ function DokanOpenRequestorToken(
 ): THandle; stdcall;
 
 procedure DokanMapKernelToUserCreateFileFlags(
-  FileAttributes:                ULONG;
-  CreateOptions:                 ULONG;
-  CreateDisposition:             ULONG;
-  var outFileAttributesAndFlags: DWORD;
-  var outCreationDisposition:    DWORD
+  FileAttributes:            ULONG;
+  CreateOptions:             ULONG;
+  CreateDisposition:         ULONG;
+  outFileAttributesAndFlags: PDWORD;
+  outCreationDisposition:    PDWORD
 ); stdcall;
 
 implementation

@@ -1392,6 +1392,7 @@ begin
 
   // Add security name privilege. Required here to handle GetFileSecurity
   // properly.
+  // Needs admin privileges
   if (not AddSeSecurityNamePrivilege()) then begin
     Writeln(ErrOutput, '  Failed to add security privilege to process');
     Dispose(dokanOperations);

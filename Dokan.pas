@@ -33,11 +33,12 @@ uses
   DokanWin;
 
 const
-  DokanLibrary = 'dokan.dll';
+  DokanLibrary = 'dokan1.dll';
 
-  // The current Dokan version (ver 0.8.0). Please set this constant on
+  // The current Dokan version (ver 1.0.0). Please set this constant on
   // DokanOptions->Version.
-  DOKAN_VERSION = 800;
+  DOKAN_VERSION = 100;
+  DOKAN_MINIMUM_COMPATIBLE_VERSION = 100;
 
   DOKAN_OPTION_DEBUG         = 1;   // ouput debug message
   DOKAN_OPTION_STDERR        = 2;   // ouput debug message to stderr
@@ -46,6 +47,8 @@ const
   DOKAN_OPTION_NETWORK       = 16;  // use network drive, you need to
                                     // install Dokan network provider.
   DOKAN_OPTION_REMOVABLE     = 32;  // use removable drive
+  DOKAN_OPTION_MOUNT_MANAGER = 64;  // use mount manager
+  DOKAN_OPTION_CURRENT_SESSION=128; // mount the drive on current session only
 
 type
   _DOKAN_ACCESS_STATE = packed record
@@ -110,7 +113,6 @@ type
   TDokanFileInfo = DOKAN_FILE_INFO;
   PDokanFileInfo = PDOKAN_FILE_INFO;
 
-type
   // FillFindData
   //   is used to add an entry in FindFiles
   //   returns 1 if buffer is full, otherwise 0
@@ -201,8 +203,8 @@ type
     var DokanFileInfo:   DOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
-  // You should implement either FindFiles or FindFilesWithPattern
-
+  // FindFilesWithPattern is checking first. If it is not implemented or
+  // returns STATUS_NOT_IMPLEMENTED, then FindFiles is called, if implemented.
   TDokanFindFiles = function(
     PathName:          LPCWSTR;
     FillFindData:      TDokanFillFindData;  // call this function with PWIN32_FIND_DATAW
@@ -216,6 +218,8 @@ type
     var DokanFileInfo: DOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
+  // SetFileAttributes and SetFileTime are called only if both of them
+  // are implemented.
   TDokanSetFileAttributes = function(
     FileName:          LPCWSTR;
     FileAttributes:    DWORD;

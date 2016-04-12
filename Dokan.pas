@@ -1,9 +1,10 @@
 (*
   Dokan : user-mode file system library for Windows
 
-  Copyright (C) 2008 Hiroki Asakawa info@dokan-dev.net
+  Copyright (C) 2015 - 2016 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
+  Copyright (C) 2007 - 2011 Hiroki Asakawa <info@dokan-dev.net>
 
-  http://dokan-dev.net/en
+  http://dokan-dev.github.io
 
   Delphi header translation by Vincent Forman (vincent.forman@gmail.com)
 
@@ -40,6 +41,8 @@ const
   DOKAN_VERSION = 100;
   DOKAN_MINIMUM_COMPATIBLE_VERSION = 100;
 
+  DOKAN_MAX_INSTANCES        = 32;  // Maximum number of dokan instances
+
   DOKAN_OPTION_DEBUG         = 1;   // ouput debug message
   DOKAN_OPTION_STDERR        = 2;   // ouput debug message to stderr
   DOKAN_OPTION_ALT_STREAM    = 4;   // use alternate stream
@@ -52,17 +55,17 @@ const
 
 type
   _DOKAN_ACCESS_STATE = packed record
-    SecurityEvaluated: ByteBool;
-    GenerateAudit: ByteBool;
-    GenerateOnClose: ByteBool;
-    AuditPrivileges: ByteBool;
-    Flags: ULONG;
-    RemainingDesiredAccess: ACCESS_MASK;
+    SecurityEvaluated:       ByteBool;
+    GenerateAudit:           ByteBool;
+    GenerateOnClose:         ByteBool;
+    AuditPrivileges:         ByteBool;
+    Flags:                   ULONG;
+    RemainingDesiredAccess:  ACCESS_MASK;
     PreviouslyGrantedAccess: ACCESS_MASK;
-    OriginalDesiredAccess: ACCESS_MASK;
-    SecurityDescriptor: PSECURITY_DESCRIPTOR;
-    ObjectName: UNICODE_STRING;
-    ObjectType: UNICODE_STRING;
+    OriginalDesiredAccess:   ACCESS_MASK;
+    SecurityDescriptor:      PSECURITY_DESCRIPTOR;
+    ObjectName:              UNICODE_STRING;
+    ObjectType:              UNICODE_STRING;
   end;
   DOKAN_ACCESS_STATE = _DOKAN_ACCESS_STATE;
   PDOKAN_ACCESS_STATE = ^_DOKAN_ACCESS_STATE;
@@ -70,7 +73,7 @@ type
   PDokanAccessState = PDOKAN_ACCESS_STATE;
 
   _DOKAN_IO_SECURITY_CONTEXT = packed record
-    AccessState: DOKAN_ACCESS_STATE;
+    AccessState:   DOKAN_ACCESS_STATE;
     DesiredAccess: ACCESS_MASK;
   end;
   DOKAN_IO_SECURITY_CONTEXT = _DOKAN_IO_SECURITY_CONTEXT;
@@ -86,7 +89,10 @@ type
     GlobalContext: ULONG64;  // FileSystem can store anything here
     MountPoint:    LPCWSTR;  // mount point "M:\" (drive letter) or "C:\mount\dokan"
                              // (path in NTFS)
+    UNCName:       LPCWSTR;  // UNC provider name
     Timeout:       ULONG;    // IrpTimeout in milliseconds
+    AllocationUnitSize: ULONG;// Device allocation size
+    SectorSize:    ULONG;    // Device sector size
   end;
   DOKAN_OPTIONS = _DOKAN_OPTIONS;
   PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
@@ -385,6 +391,15 @@ type
   TDokanOperations = DOKAN_OPERATIONS;
   PDokanOperations = PDOKAN_OPERATIONS;
 
+//TODO
+//typedef struct _DOKAN_CONTROL {
+//  ULONG Type;
+//  WCHAR MountPoint[MAX_PATH];
+//  WCHAR UNCName[64];
+//  WCHAR DeviceName[64];
+//  PVOID DeviceObject;
+//} DOKAN_CONTROL, *PDOKAN_CONTROL;
+
 (* DokanMain returns error codes *)
 const
   DOKAN_SUCCESS              =  0;
@@ -438,6 +453,12 @@ function DokanResetTimeout(
 function DokanOpenRequestorToken(
   var DokanFileInfo: DOKAN_FILE_INFO
 ): THandle; stdcall;
+
+//TODO
+//function DokanGetMountPointList(
+//  PDOKAN_CONTROL list, ULONG length,
+//                                     BOOL uncOnly, PULONG nbRead
+//): BOOL; stdcall;
 
 procedure DokanMapKernelToUserCreateFileFlags(
   FileAttributes:            ULONG;

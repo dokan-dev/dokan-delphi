@@ -1,6 +1,10 @@
 (*
+Dokan : user-mode file system library for Windows
 
-Copyright (c) 2007, 2008 Hiroki Asakawa info@dokan-dev.net
+Copyright (C) 2015 - 2016 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
+Copyright (C) 2007 - 2011 Hiroki Asakawa <info@dokan-dev.net>
+
+http://dokan-dev.github.io
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -30,14 +34,19 @@ program Mirror;
 {$APPTYPE CONSOLE}
 
 uses
-  Windows,
-  SysUtils,
+  Windows,SysUtils,Math,
   Dokan in 'Dokan.pas',
   DokanWin in 'DokanWin.pas';
 
 const
   EXIT_SUCCESS = 0;
   EXIT_FAILURE = 1;
+
+  LOCALE_NAME_SYSTEM_DEFAULT  = '!x-sys-default-locale';
+
+  CSTR_LESS_THAN    = 1;
+  CSTR_EQUAL        = 2;
+  CSTR_GREATER_THAN = 3;
 
 type
   LPVOID = Pointer;
@@ -64,6 +73,12 @@ function FindFirstStreamW(lpFileName: LPCWSTR; InfoLevel: STREAM_INFO_LEVELS;
 
 function FindNextStreamW(hFindStream: THandle;
   lpFindStreamData: LPVOID): BOOL; stdcall; external kernel32;
+
+function CompareStringEx(lpLocaleName: LPCWSTR; dwCmpFlags: DWORD;
+  lpString1: LPCWSTR; cchCount1: Integer;
+  lpString2: LPCWSTR; cchCount2: Integer;
+  lpVersionInformation: Pointer; lpReserved: LPVOID;
+  lParam: LPARAM): Integer; stdcall; external kernel32;
 
 type
   WCHAR_PATH = array [0 .. MAX_PATH-1] of WCHAR;
@@ -96,7 +111,7 @@ begin
     end;
     if( i <> j )then
       SetLength(format, j - 1);
-    outputString:=SysUtils.Format(format, args);
+    outputString := SysUtils.Format(format, args);
     if (g_UseStdErr) then
       Write(ErrOutput, outputString)
     else
@@ -112,12 +127,52 @@ end;
 var
   RootDirectory: WCHAR_PATH;
   MountPoint: WCHAR_PATH;
+  UNCName: WCHAR_PATH;
+
+procedure wcsncat_s(dst: PWCHAR; dst_len: size_t; src: PWCHAR; src_len: size_t);
+begin
+  while (dst^ <> #0) and (dst_len > 0) do begin
+    Inc(dst);
+    Dec(dst_len);
+  end;
+  while (dst_len > 0) and (src^ <> #0) and (src_len > 0) do begin
+    dst^ := src^;
+    Inc(dst);
+    Dec(dst_len);
+    Inc(src);
+    Dec(src_len);
+  end;
+  if( dst_len = 0 )then
+    Dec(dst);
+  dst^ := #0
+end;
+
+function _wcsnicmp(str1, str2: PWCHAR; len: Integer): Integer;
+begin
+  Result := CompareStringEx(
+    LOCALE_NAME_SYSTEM_DEFAULT,
+    NORM_IGNORECASE,
+    str1, Math.Min(lstrlenW(str1), len),
+    str2, Math.Min(lstrlenW(str2), len),
+    nil, nil, 0
+  ) - CSTR_EQUAL;
+end;
 
 procedure GetFilePath(filePath: PWCHAR; numberOfElements: ULONG;
                       const FileName: LPCWSTR);
+var
+  unclen: Integer;
 begin
   lstrcpynW(filePath, RootDirectory, numberOfElements);
-  lstrcatW(filePath, FileName);
+  unclen := lstrlenW(UNCName);
+  if (unclen > 0) and (_wcsnicmp(FileName, UNCName, unclen) = 0) then begin
+    if (_wcsnicmp(FileName + unclen, '.', 1) <> 0) then begin
+      wcsncat_s(filePath, numberOfElements, FileName + unclen,
+                lstrlenW(FileName) - unclen);
+    end;
+  end else begin
+    wcsncat_s(filePath, numberOfElements, FileName, lstrlenW(FileName));
+  end;
 end;
 
 procedure PrintUserName(var DokanFileInfo: DOKAN_FILE_INFO);
@@ -579,7 +634,8 @@ begin
     Result := ToNtStatus(error); Exit;
 
   end else begin
-    DbgPrint('\tread %d, offset %d\n\n', [ReadLength, offset_]);
+    DbgPrint('\tByte to read: %d, Byte read %d, offset %d\n\n', [BufferLength,
+             ReadLength, offset_]);
   end;
 
   if (opened) then
@@ -860,24 +916,23 @@ begin
     Result := ToNtStatus(error); Exit;
   end;
 
-  while (hFind <> INVALID_HANDLE_VALUE) do begin
+  repeat
     if (lstrcmpW(findData.cFileName, '..') <> 0) and
         (lstrcmpW(findData.cFileName, '.') <> 0) then begin
       Windows.FindClose(hFind);
       DbgPrint('\tDirectory is not empty: %s\n', [findData.cFileName]);
       Result := STATUS_DIRECTORY_NOT_EMPTY; Exit;
     end;
-    if (not FindNextFileW(hFind, findData)) then begin
-      Break;
-    end;
-  end;
+  until (FindNextFileW(hFind, findData) = False);
+  
   error := GetLastError();
-  Windows.FindClose(hFind);
-
+  
   if (error <> ERROR_NO_MORE_FILES) then begin
     DbgPrint('\tDeleteDirectory error code = %d\n\n', [error]);
     Result := ToNtStatus(error); Exit;
   end;
+
+  Windows.FindClose(hFind);
 
   Result := STATUS_SUCCESS; Exit;
 end;
@@ -1218,7 +1273,10 @@ begin
                      FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
                      FILE_PERSISTENT_ACLS;
 
-  lstrcpynW(FileSystemNameBuffer, 'Dokan', FileSystemNameSize);
+  // File system name could be anything up to 10 characters.
+  // But Windows check few feature availability based on file system name.
+  // For this, it is recommended to set NTFS or FAT here.
+  lstrcpynW(FileSystemNameBuffer, 'NTFS', FileSystemNameSize);
 
   Result := STATUS_SUCCESS; Exit;
 end;
@@ -1305,6 +1363,23 @@ begin
   Result := STATUS_SUCCESS; Exit;
 end;
 
+function CtrlHandler(dwCtrlType: DWORD): BOOL; stdcall;
+begin
+  case (dwCtrlType) of
+    CTRL_C_EVENT,
+    CTRL_BREAK_EVENT,
+    CTRL_CLOSE_EVENT,
+    CTRL_LOGOFF_EVENT,
+    CTRL_SHUTDOWN_EVENT: begin
+      SetConsoleCtrlHandler(@CtrlHandler, False);
+      DokanRemoveMountPoint(MountPoint);
+      Result := True;
+    end;
+  else
+    Result := False;
+  end;
+end;
+
 function wmain(argc: ULONG; argv: array of string): Integer;
 var
   status: Integer;
@@ -1322,7 +1397,7 @@ begin
     Result := EXIT_FAILURE; Exit;
   end;
 
-  if (argc < 5) then begin
+  if (argc < 3) then begin
     Write(ErrOutput, 'mirror.exe'#10 +
                      '  /r RootDirectory (ex. /r c:\\test)'#10 +
                      '  /l DriveLetter (ex. /l m)'#10 +
@@ -1332,6 +1407,9 @@ begin
                      '  /n (use network drive)'#10 +
                      '  /m (use removable drive)'#10 +
                      '  /w (write-protect drive)'#10 +
+                     '  /o (use mount manager)'#10 +
+                     '  /c (mount for current session only)'#10 +
+                     '  /u UNC provider name'#10 +
                      '  /i (Timeout in Milliseconds ex. /i 30000)'#10);
     Dispose(dokanOperations);
     Dispose(dokanOptions);
@@ -1377,6 +1455,18 @@ begin
       'W': begin
         dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_WRITE_PROTECT;
       end;
+      'O': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_MOUNT_MANAGER;
+      end;
+      'C': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_CURRENT_SESSION;
+      end;
+      'U': begin
+        Inc(command);
+        lstrcpynW(UNCName, PWideChar(WideString(argv[command])), MAX_PATH);
+        dokanOptions^.UNCName := UNCName;
+        DbgPrint('UNC Name: %s\n', [UNCName]);
+      end;
       'I': begin
         Inc(command);
         dokanOptions^.Timeout := StrToInt(argv[command]);
@@ -1390,14 +1480,50 @@ begin
     Inc(command);
   end;
 
-  // Add security name privilege. Required here to handle GetFileSecurity
-  // properly.
-  // Needs admin privileges
-  if (not AddSeSecurityNamePrivilege()) then begin
-    Writeln(ErrOutput, '  Failed to add security privilege to process');
+  if (UNCName <> '') and
+      (dokanOptions^.Options and DOKAN_OPTION_NETWORK = 0) then begin
+    Writeln(
+        ErrOutput,
+        '  Warning: UNC provider name should be set on network drive only.');
+  end;
+
+  if (dokanOptions^.Options and DOKAN_OPTION_NETWORK <> 0) and
+     (dokanOptions^.Options and DOKAN_OPTION_MOUNT_MANAGER <> 0) then begin
+    Writeln(ErrOutput, 'Mount manager cannot be used on network drive.');
     Dispose(dokanOperations);
     Dispose(dokanOptions);
     Result := -1; Exit;
+  end;
+
+  if (dokanOptions^.Options and DOKAN_OPTION_MOUNT_MANAGER = 0) and
+     (MountPoint = '') then begin
+    Writeln(ErrOutput, 'Mount Point required.');
+    Dispose(dokanOperations);
+    Dispose(dokanOptions);
+    Result := -1; Exit;
+  end;
+
+  if (dokanOptions^.Options and DOKAN_OPTION_MOUNT_MANAGER <> 0) and
+     (dokanOptions^.Options and DOKAN_OPTION_CURRENT_SESSION <> 0) then begin
+    Writeln(ErrOutput,
+             'Mount Manager always mount the drive for all user sessions.');
+    Dispose(dokanOperations);
+    Dispose(dokanOptions);
+    Result := -1; Exit;
+  end;
+
+  if (not SetConsoleCtrlHandler(@CtrlHandler, True)) then begin
+    Writeln(ErrOutput, 'Control Handler is not set.');
+  end;
+
+  // Add security name privilege. Required here to handle GetFileSecurity
+  // properly.
+  if (not AddSeSecurityNamePrivilege()) then begin
+    Writeln(ErrOutput, 'Failed to add security privilege to process');
+    Writeln(ErrOutput,
+             #09'=> GetFileSecurity/SetFileSecurity may not work properly');
+    Writeln(ErrOutput, #09'=> Please restart mirror sample with administrator ' +
+                     'rights to fix it');
   end;
 
   if (g_DebugMode) then begin
@@ -1470,6 +1596,10 @@ var
 
 begin
   IsMultiThread := True;
+
+  lstrcpyW(RootDirectory, 'C:');
+  lstrcpyW(MountPoint, 'M:\');
+  lstrcpyW(UNCName, '');
 
   argc := 1 + ParamCount();
   SetLength(argv, argc);

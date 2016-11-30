@@ -1,5 +1,5 @@
 // source: dokany/samples/dokan_mirror/mirror.c
-// commit: 42e7a7b3129d5536aefdcea355330f7d6971a630
+// commit: 175c9c4106d7ed6df8b96f89d7f6fc0130ebac7d
 
 (*
   Dokan : user-mode file system library for Windows
@@ -62,7 +62,7 @@ type
 
   STREAM_INFO_LEVELS = (FindStreamInfoStandard = 0);
 
-  FILE_INFO_BY_HANDLE_CLASS = (FileRenameInfo = 3);
+  FILE_INFO_BY_HANDLE_CLASS = (FileRenameInfo = 3, FileDispositionInfo = 4);
 
   _FILE_RENAME_INFO = record
     ReplaceIfExists: ByteBool;
@@ -72,6 +72,12 @@ type
   end;
   FILE_RENAME_INFO = _FILE_RENAME_INFO;
   PFILE_RENAME_INFO = ^_FILE_RENAME_INFO;
+
+  _FILE_DISPOSITION_INFO = record
+    DeleteFile: ByteBool;
+  end;
+  FILE_DISPOSITION_INFO = _FILE_DISPOSITION_INFO;
+  PFILE_DISPOSITION_INFO = ^_FILE_DISPOSITION_INFO;
 
 function GetFileSizeEx(hFile: THandle;
   var lpFileSize: LARGE_INTEGER): BOOL; stdcall; external kernel32;
@@ -320,6 +326,7 @@ var
   fileAttributesAndFlags: DWORD;
   error: DWORD;
   securityAttrib: SECURITY_ATTRIBUTES;
+  genericDesiredAccess: ACCESS_MASK;
 begin
   status := STATUS_SUCCESS;
 
@@ -331,6 +338,8 @@ begin
   DokanMapKernelToUserCreateFileFlags(
       FileAttributes, CreateOptions, CreateDisposition, @fileAttributesAndFlags,
       @creationDisposition);
+
+  genericDesiredAccess := DokanMapStandardToGenericAccess(DesiredAccess);
 
   GetFilePath(filePath, MAX_PATH, FileName);
 
@@ -351,7 +360,7 @@ begin
   MirrorCheckFlag(ShareAccess, FILE_SHARE_WRITE, 'FILE_SHARE_WRITE');
   MirrorCheckFlag(ShareAccess, FILE_SHARE_DELETE, 'FILE_SHARE_DELETE');
 
-  DbgPrint('\tAccessMode = 0x%x\n', [DesiredAccess]);
+  DbgPrint('\tDesiredAccess = 0x%x\n', [DesiredAccess]);
 
   MirrorCheckFlag(DesiredAccess, GENERIC_READ, 'GENERIC_READ');
   MirrorCheckFlag(DesiredAccess, GENERIC_WRITE, 'GENERIC_WRITE');
@@ -452,10 +461,18 @@ begin
       end;
     end;
     if (status = STATUS_SUCCESS) then begin
+      //Check first if we're trying to open a file as a directory.
+      if (fileAttr <> INVALID_FILE_ATTRIBUTES) and
+          (fileAttr and FILE_ATTRIBUTE_DIRECTORY = 0) and
+          (CreateOptions and FILE_DIRECTORY_FILE <> 0) then begin
+        Result := STATUS_NOT_A_DIRECTORY; Exit;
+      end;
+
       // FILE_FLAG_BACKUP_SEMANTICS is required for opening directory handles
-      handle := CreateFileW(
-          filePath, DesiredAccess, ShareAccess, @securityAttrib, OPEN_EXISTING,
-          fileAttributesAndFlags or FILE_FLAG_BACKUP_SEMANTICS, 0);
+      handle :=
+          CreateFileW(filePath, genericDesiredAccess, ShareAccess,
+                     @securityAttrib, OPEN_EXISTING,
+                     fileAttributesAndFlags or FILE_FLAG_BACKUP_SEMANTICS, 0);
 
       if (handle = INVALID_HANDLE_VALUE) then begin
         error := GetLastError();
@@ -475,14 +492,14 @@ begin
         (CreateDisposition = FILE_CREATE) then begin
       Result := STATUS_OBJECT_NAME_COLLISION; Exit; // File already exist because
     end;                                   // GetFileAttributes found it
-    handle :=
-        CreateFileW(filePath,
-                   DesiredAccess, // GENERIC_READ or GENERIC_WRITE or GENERIC_EXECUTE,
-                   ShareAccess,
-                   @securityAttrib, // security attribute
-                   creationDisposition,
-                   fileAttributesAndFlags, // or FILE_FLAG_NO_BUFFERING,
-                   0);                  // template file handle
+    handle := CreateFileW(
+        filePath,
+        genericDesiredAccess, // GENERIC_READ or GENERIC_WRITE or GENERIC_EXECUTE,
+        ShareAccess,
+        @securityAttrib, // security attribute
+        creationDisposition,
+        fileAttributesAndFlags, // or FILE_FLAG_NO_BUFFERING,
+        0);                  // template file handle
 
     if (handle = INVALID_HANDLE_VALUE) then begin
       error := GetLastError();
@@ -778,16 +795,25 @@ var
   error: DWORD;
   find: WIN32_FIND_DATAW;
   findHandle: THandle;
+  opened: Boolean;
 begin
   handle := THandle(DokanFileInfo.Context);
+  opened := False;
 
   GetFilePath(filePath, MAX_PATH, FileName);
 
   DbgPrint('GetFileInfo : %s\n', [filePath]);
 
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
-    DbgPrint('\tinvalid handle\n\n');
-    Result := STATUS_INVALID_PARAMETER; Exit;
+    DbgPrint('\tinvalid handle, cleanuped?\n');
+    handle := CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ, nil,
+                        OPEN_EXISTING, 0, 0);
+    if (handle = INVALID_HANDLE_VALUE) then begin
+      error := GetLastError();
+      DbgPrint('\tCreateFile error : %d\n\n', [error]);
+      Result := DokanNtStatusFromWin32(error); Exit;
+    end;
+    opened := True;
   end;
 
   if (not GetFileInformationByHandle(handle, HandleFileInformation)) then begin
@@ -805,6 +831,8 @@ begin
       if (findHandle = INVALID_HANDLE_VALUE) then begin
         error := GetLastError();
         DbgPrint('\tFindFirstFile error code = %d\n\n', [error]);
+        if (opened) then
+          CloseHandle(handle);
         Result := DokanNtStatusFromWin32(error); Exit;
       end;
       HandleFileInformation.dwFileAttributes := find.dwFileAttributes;
@@ -822,6 +850,9 @@ begin
   end;
 
   DbgPrint('\n');
+
+  if (opened) then
+    CloseHandle(handle);
 
   Result := STATUS_SUCCESS; Exit;
 end;
@@ -885,16 +916,28 @@ end;
 function MirrorDeleteFile(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
+  handle: THandle;
   dwAttrib: DWORD;
+  fdi: FILE_DISPOSITION_INFO;
 begin
+  handle := THandle(DokanFileInfo.Context);
+
   GetFilePath(filePath, MAX_PATH, FileName);
-  DbgPrint('DeleteFile %s\n', [filePath]);
+  DbgPrint('DeleteFile %s - %d\n', [filePath, Byte(DokanFileInfo.DeleteOnClose)]);
 
   dwAttrib := GetFileAttributesW(filePath);
 
   if (dwAttrib <> INVALID_FILE_ATTRIBUTES) and
       (dwAttrib and FILE_ATTRIBUTE_DIRECTORY <> 0) then begin
     Result := STATUS_ACCESS_DENIED; Exit;
+  end;
+
+  if (handle <> 0) and (handle <> INVALID_HANDLE_VALUE) then begin
+    fdi.DeleteFile := DokanFileInfo.DeleteOnClose;
+    if (not SetFileInformationByHandle(handle, FileDispositionInfo, @fdi,
+                                    sizeof(FILE_DISPOSITION_INFO))) then begin
+      Result := DokanNtStatusFromWin32(GetLastError()); Exit;
+    end;
   end;
 
   Result := STATUS_SUCCESS; Exit;
@@ -911,7 +954,13 @@ begin
   ZeroMemory(@filePath[0], SizeOf(filePath));
   GetFilePath(filePath, MAX_PATH, FileName);
 
-  DbgPrint('DeleteDirectory %s\n', [filePath]);
+  DbgPrint('DeleteDirectory %s - %d\n', [filePath,
+           Byte(DokanFileInfo.DeleteOnClose)]);
+
+  if (not DokanFileInfo.DeleteOnClose) then begin
+    //Dokan notify that the file is requested not to be deleted.
+    Result := STATUS_SUCCESS; Exit;
+  end;
 
   fileLen := lstrlenW(filePath);
   if (filePath[fileLen - 1] <> '\') then begin

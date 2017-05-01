@@ -1,10 +1,10 @@
 // source: dokany/samples/dokan_mirror/mirror.c
-// commit: 175c9c4106d7ed6df8b96f89d7f6fc0130ebac7d
+// commit: 12ae5ecf999f1d2741b4a86f6d01dc49be1ca1bf
 
 (*
   Dokan : user-mode file system library for Windows
 
-  Copyright (C) 2015 - 2016 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
+  Copyright (C) 2015 - 2017 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
   Copyright (C) 2007 - 2011 Hiroki Asakawa <info@dokan-dev.net>
 
   http://dokan-dev.github.io
@@ -155,12 +155,23 @@ begin
     SetLength(Result, j - 1);
 end;
 
+//{$define WIN10_ENABLE_LONG_PATH}
+{$ifdef WIN10_ENABLE_LONG_PATH}
+//dirty but should be enough
+const
+	DOKAN_MAX_PATH = 32768;
+{$else}
+const
+	DOKAN_MAX_PATH = MAX_PATH;
+{$endif} // DEBUG
+
 type
-  WCHAR_PATH = array [0 .. MAX_PATH-1] of WCHAR;
+  WCHAR_PATH = array [0 .. DOKAN_MAX_PATH-1] of WCHAR;
 
 var
   g_UseStdErr: Boolean;
   g_DebugMode: Boolean;
+  g_HasSeSecurityPrivilege: Boolean;
 
 procedure DbgPrint(format: string; const args: array of const); overload;
 var
@@ -341,7 +352,7 @@ begin
 
   genericDesiredAccess := DokanMapStandardToGenericAccess(DesiredAccess);
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('CreateFile: %s\n', [filePath]);
 
@@ -532,7 +543,7 @@ procedure MirrorCloseFile(FileName: LPCWSTR;
 var
   filePath: WCHAR_PATH;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   if (DokanFileInfo.Context <> 0) then begin
     DbgPrint('CloseFile: %s\n', [filePath]);
@@ -549,7 +560,7 @@ procedure MirrorCleanup(FileName: LPCWSTR;
 var
   filePath: WCHAR_PATH;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   if (DokanFileInfo.Context <> 0) then begin
     DbgPrint('Cleanup: %s\n\n', [filePath]);
@@ -598,7 +609,7 @@ begin
   offset_ := ULONG(Offset);
   opened := False;
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('ReadFile : %s\n', [filePath]);
 
@@ -662,7 +673,7 @@ begin
   handle := THandle(DokanFileInfo.Context);
   opened := False;
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('WriteFile : %s, offset %d, length %d\n', [filePath, Offset,
            NumberOfBytesToWrite]);
@@ -768,7 +779,7 @@ var
 begin
   handle := THandle(DokanFileInfo.Context);
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('FlushFileBuffers : %s\n', [filePath]);
 
@@ -800,7 +811,7 @@ begin
   handle := THandle(DokanFileInfo.Context);
   opened := False;
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('GetFileInfo : %s\n', [filePath]);
 
@@ -871,7 +882,7 @@ var
 begin
   count := 0;
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('FindFiles :%s\n', [filePath]);
 
@@ -922,7 +933,7 @@ var
 begin
   handle := THandle(DokanFileInfo.Context);
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
   DbgPrint('DeleteFile %s - %d\n', [filePath, Byte(DokanFileInfo.DeleteOnClose)]);
 
   dwAttrib := GetFileAttributesW(filePath);
@@ -952,7 +963,7 @@ var
   error: DWORD;
 begin
   ZeroMemory(@filePath[0], SizeOf(filePath));
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('DeleteDirectory %s - %d\n', [filePath,
            Byte(DokanFileInfo.DeleteOnClose)]);
@@ -1014,8 +1025,8 @@ var
 begin
   renameInfo := nil;
 
-  GetFilePath(filePath, MAX_PATH, FileName);
-  GetFilePath(newFilePath, MAX_PATH, NewFileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
+  GetFilePath(newFilePath, DOKAN_MAX_PATH, NewFileName);
 
   DbgPrint('MoveFile %s -> %s\n\n', [filePath, newFilePath]);
   handle := THandle(DokanFileInfo.Context);
@@ -1072,7 +1083,7 @@ var
   length_: LARGE_INTEGER;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('LockFile %s\n', [filePath]);
 
@@ -1104,7 +1115,7 @@ var
   offset: LARGE_INTEGER;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('SetEndOfFile %s, %d\n', [filePath, ByteOffset]);
 
@@ -1139,7 +1150,7 @@ var
   fileSize: LARGE_INTEGER;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('SetAllocationSize %s, %d\n', [filePath, AllocSize]);
 
@@ -1179,7 +1190,7 @@ var
   filePath: WCHAR_PATH;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('SetFileAttributes %s\n', [filePath]);
 
@@ -1201,7 +1212,7 @@ var
   handle: THandle;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('SetFileTime %s\n', [filePath]);
 
@@ -1231,7 +1242,7 @@ var
   offset: LARGE_INTEGER;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('UnlockFile %s\n', [filePath]);
 
@@ -1261,11 +1272,12 @@ function MirrorGetFileSecurity(
     var LengthNeeded: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
+  requestingSaclInfo: Boolean;
   handle: THandle;
   DesiredAccess: DWORD;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('GetFileSecurity %s\n', [filePath]);
 
@@ -1285,15 +1297,21 @@ begin
   MirrorCheckFlag(SecurityInformation, UNPROTECTED_DACL_SECURITY_INFORMATION, 'UNPROTECTED_DACL_SECURITY_INFORMATION');
   MirrorCheckFlag(SecurityInformation, UNPROTECTED_SACL_SECURITY_INFORMATION, 'UNPROTECTED_SACL_SECURITY_INFORMATION');
 
+  requestingSaclInfo := ((SecurityInformation and SACL_SECURITY_INFORMATION <> 0) or
+                        (SecurityInformation and BACKUP_SECURITY_INFORMATION <> 0));
+
+  if (not g_HasSeSecurityPrivilege) then begin
+    SecurityInformation := SecurityInformation and not SACL_SECURITY_INFORMATION;
+    SecurityInformation := SecurityInformation and not BACKUP_SECURITY_INFORMATION;
+  end;
+
   DesiredAccess := READ_CONTROL;
-  if (SecurityInformation and SACL_SECURITY_INFORMATION <> 0) or
-      (SecurityInformation and BACKUP_SECURITY_INFORMATION <> 0) then begin
+  if (requestingSaclInfo and g_HasSeSecurityPrivilege) then begin
     DesiredAccess := DesiredAccess or ACCESS_SYSTEM_SECURITY;
   end;
   DbgPrint('  Opening new handle with READ_CONTROL access\n');
   handle := CreateFileW(
-      filePath,
-      DesiredAccess,
+      filePath, DesiredAccess,
       FILE_SHARE_WRITE or FILE_SHARE_READ or FILE_SHARE_DELETE,
       nil, // security attribute
       OPEN_EXISTING,
@@ -1333,7 +1351,7 @@ var
   filePath: WCHAR_PATH;
   error: DWORD;
 begin
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('SetFileSecurity %s\n', [filePath]);
 
@@ -1356,18 +1374,55 @@ function MirrorGetVolumeInformation(
     var MaximumComponentLength: DWORD; var FileSystemFlags: DWORD;
     FileSystemNameBuffer: LPWSTR; FileSystemNameSize: DWORD;
     var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+var
+  volumeRoot: array [0 .. 3] of WCHAR;
+  fsFlags: DWORD;
 begin
-  lstrcpynW(VolumeNameBuffer, 'DOKAN', VolumeNameSize);
-  VolumeSerialNumber := $19831116;
-  MaximumComponentLength := 256;
-  FileSystemFlags := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES or
-                     FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
-                     FILE_PERSISTENT_ACLS;
+  fsFlags := 0;
 
-  // File system name could be anything up to 10 characters.
-  // But Windows check few feature availability based on file system name.
-  // For this, it is recommended to set NTFS or FAT here.
-  lstrcpynW(FileSystemNameBuffer, 'NTFS', FileSystemNameSize);
+  lstrcpynW(VolumeNameBuffer, 'DOKAN', VolumeNameSize);
+  if (@VolumeSerialNumber <> nil) then
+    VolumeSerialNumber := $19831116;
+  if (@MaximumComponentLength <> nil) then
+    MaximumComponentLength := 255;
+  if (@FileSystemFlags <> nil) then
+    FileSystemFlags := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES or
+                     FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
+                     FILE_PERSISTENT_ACLS or FILE_NAMED_STREAMS;
+
+  volumeRoot[0] := RootDirectory[0];
+  volumeRoot[1] := ':';
+  volumeRoot[2] := '\';
+  volumeRoot[3] := #0;
+
+  if (GetVolumeInformationW(@volumeRoot[0], nil, 0, nil, MaximumComponentLength,
+        fsFlags, FileSystemNameBuffer, FileSystemNameSize)) then begin
+
+    if (@FileSystemFlags <> nil) then
+      FileSystemFlags := FileSystemFlags and fsFlags;
+
+    if (@MaximumComponentLength <> nil) then begin
+      DbgPrint('GetVolumeInformation: max component length %u\n',
+                 [MaximumComponentLength]);
+    end;
+    if (@FileSystemNameBuffer <> nil) then begin
+      DbgPrint('GetVolumeInformation: file system name %s\n',
+                 [FileSystemNameBuffer]);
+    end;
+    if (@FileSystemFlags <> nil) then begin
+      DbgPrint('GetVolumeInformation: got file system flags 0x%08x,' +
+          ' returning 0x%08x\n', [fsFlags, FileSystemFlags]);
+    end;
+  end else begin
+
+    DbgPrint('GetVolumeInformation: unable to query underlying fs,' +
+               ' using defaults.  Last error = %u\n', [GetLastError()]);
+
+    // File system name could be anything up to 10 characters.
+    // But Windows check few feature availability based on file system name.
+    // For this, it is recommended to set NTFS or FAT here.
+    lstrcpynW(FileSystemNameBuffer, 'NTFS', FileSystemNameSize);
+  end;
 
   Result := STATUS_SUCCESS; Exit;
 end;
@@ -1424,7 +1479,7 @@ var
 begin
   count := 0;
 
-  GetFilePath(filePath, MAX_PATH, FileName);
+  GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('FindStreams :%s\n', [filePath]);
 
@@ -1502,6 +1557,7 @@ begin
     '  /u (UNC provider name ex. \\localhost\\myfs)\t UNC name used for network volume.\n' +
     '  /a Allocation unit size (ex. /a 512)\t\t Allocation Unit Size of the volume. This will behave on the disk file size.\n' +
     '  /k Sector size (ex. /k 512)\t\t\t Sector Size of the volume. This will behave on the disk file size.\n' +
+    '  /f User mode Lock\t\t\t\t Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it.\n' +
     '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
     'Examples:\n' +
     '\tmirror.exe /r C:\\Users /l M:\t\t\t# Mirror C:\\Users as RootDirectory into a drive of letter M:\\.\n' +
@@ -1546,12 +1602,12 @@ begin
     case (UpCase(argv[command][2])) of
       'R': begin
         Inc(command);
-        lstrcpynW(RootDirectory, PWideChar(WideString(argv[command])), MAX_PATH);
+        lstrcpynW(RootDirectory, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
         DbgPrint('RootDirectory: %s\n', [RootDirectory]);
       end;
       'L': begin
         Inc(command);
-        lstrcpynW(MountPoint, PWideChar(WideString(argv[command])), MAX_PATH);
+        lstrcpynW(MountPoint, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
         dokanOptions^.MountPoint := MountPoint;
       end;
       'T': begin
@@ -1579,9 +1635,12 @@ begin
       'C': begin
         dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_CURRENT_SESSION;
       end;
+      'F': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_FILELOCK_USER_MODE;
+      end;
       'U': begin
         Inc(command);
-        lstrcpynW(UNCName, PWideChar(WideString(argv[command])), MAX_PATH);
+        lstrcpynW(UNCName, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
         dokanOptions^.UNCName := UNCName;
         DbgPrint('UNC Name: %s\n', [UNCName]);
       end;
@@ -1644,7 +1703,8 @@ begin
 
   // Add security name privilege. Required here to handle GetFileSecurity
   // properly.
-  if (not AddSeSecurityNamePrivilege()) then begin
+  g_HasSeSecurityPrivilege := AddSeSecurityNamePrivilege();
+  if (not g_HasSeSecurityPrivilege) then begin
     Writeln(ErrOutput, 'Failed to add security privilege to process');
     Writeln(ErrOutput,
              #09'=> GetFileSecurity/SetFileSecurity may not work properly');

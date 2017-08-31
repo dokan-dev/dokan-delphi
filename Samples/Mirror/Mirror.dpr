@@ -1,5 +1,5 @@
 // source: dokany/samples/dokan_mirror/mirror.c
-// commit: 12ae5ecf999f1d2741b4a86f6d01dc49be1ca1bf
+// commit: af8d4c68816abbf862690842cf9c72cd9bf3b041
 
 (*
   Dokan : user-mode file system library for Windows
@@ -229,6 +229,10 @@ begin
   accountLength := SizeOf(accountName) div SizeOf(WCHAR);
   domainLength := SizeOf(domainName) div SizeOf(WCHAR);
 
+  if (not g_DebugMode) then begin
+    Exit;
+  end;
+
   handle := DokanOpenRequestorToken(DokanFileInfo);
   if (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('  DokanOpenRequestorToken failed\n');
@@ -398,27 +402,39 @@ begin
   // be opened.
   fileAttr := GetFileAttributesW(filePath);
 
-  if (fileAttr <> INVALID_FILE_ATTRIBUTES) and
-      ((fileAttr and FILE_ATTRIBUTE_DIRECTORY <> 0) and
-      (CreateOptions and FILE_NON_DIRECTORY_FILE = 0)) then begin
-    DokanFileInfo.IsDirectory := True;
-    if (DesiredAccess and DELETE <> 0) then begin
-      // Needed by FindFirstFile to see if directory is empty or not
-      ShareAccess := ShareAccess or FILE_SHARE_READ;
+  if (fileAttr <> INVALID_FILE_ATTRIBUTES) then begin
+    if (fileAttr and FILE_ATTRIBUTE_DIRECTORY <> 0) then begin
+      if (CreateOptions and FILE_NON_DIRECTORY_FILE = 0) then begin
+        DokanFileInfo.IsDirectory := True;
+        // Needed by FindFirstFile to list files in it
+        // TODO: use ReOpenFile in MirrorFindFiles to set share read temporary
+        ShareAccess := ShareAccess or FILE_SHARE_READ;
+      end else begin // FILE_NON_DIRECTORY_FILE - Cannot open a dir as a file
+        DbgPrint('\tCannot open a dir as a file\n');
+        Result := STATUS_FILE_IS_A_DIRECTORY; Exit;
+      end;
     end;
   end;
 
   DbgPrint('\tFlagsAndAttributes = 0x%x\n', [fileAttributesAndFlags]);
 
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_ARCHIVE, 'FILE_ATTRIBUTE_ARCHIVE');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_COMPRESSED, 'FILE_ATTRIBUTE_COMPRESSED');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_DEVICE, 'FILE_ATTRIBUTE_DEVICE');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_DIRECTORY, 'FILE_ATTRIBUTE_DIRECTORY');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_ENCRYPTED, 'FILE_ATTRIBUTE_ENCRYPTED');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_HIDDEN, 'FILE_ATTRIBUTE_HIDDEN');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_INTEGRITY_STREAM, 'FILE_ATTRIBUTE_INTEGRITY_STREAM');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_NORMAL, 'FILE_ATTRIBUTE_NORMAL');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_NOT_CONTENT_INDEXED, 'FILE_ATTRIBUTE_NOT_CONTENT_INDEXED');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_NO_SCRUB_DATA, 'FILE_ATTRIBUTE_NO_SCRUB_DATA');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_OFFLINE, 'FILE_ATTRIBUTE_OFFLINE');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_READONLY, 'FILE_ATTRIBUTE_READONLY');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_REPARSE_POINT, 'FILE_ATTRIBUTE_REPARSE_POINT');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_SPARSE_FILE, 'FILE_ATTRIBUTE_SPARSE_FILE');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_SYSTEM, 'FILE_ATTRIBUTE_SYSTEM');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_TEMPORARY, 'FILE_ATTRIBUTE_TEMPORARY');
+  MirrorCheckFlag(fileAttributesAndFlags, FILE_ATTRIBUTE_VIRTUAL, 'FILE_ATTRIBUTE_VIRTUAL');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_FLAG_WRITE_THROUGH, 'FILE_FLAG_WRITE_THROUGH');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_FLAG_OVERLAPPED, 'FILE_FLAG_OVERLAPPED');
   MirrorCheckFlag(fileAttributesAndFlags, FILE_FLAG_NO_BUFFERING, 'FILE_FLAG_NO_BUFFERING');
@@ -453,25 +469,23 @@ begin
 
   if (DokanFileInfo.IsDirectory) then begin
     // It is a create directory request
-    if (creationDisposition = CREATE_NEW) then begin
+
+    if (creationDisposition = CREATE_NEW) or
+       (creationDisposition = OPEN_ALWAYS) then begin
+      //We create folder
       if (not CreateDirectoryW(filePath, @securityAttrib)) then begin
         error := GetLastError();
-        DbgPrint('\terror code = %d\n\n', [error]);
-        status := DokanNtStatusFromWin32(error);
-      end;
-    end else if (creationDisposition = OPEN_ALWAYS) then begin
-
-      if (not CreateDirectoryW(filePath, @securityAttrib)) then begin
-
-        error := GetLastError();
-
-        if (error <> ERROR_ALREADY_EXISTS) then begin
+        // Fail to create folder for OPEN_ALWAYS is not an error
+        if (error <> ERROR_ALREADY_EXISTS) or
+           (creationDisposition = CREATE_NEW) then begin
           DbgPrint('\terror code = %d\n\n', [error]);
           status := DokanNtStatusFromWin32(error);
         end;
       end;
     end;
+
     if (status = STATUS_SUCCESS) then begin
+
       //Check first if we're trying to open a file as a directory.
       if (fileAttr <> INVALID_FILE_ATTRIBUTES) and
           (fileAttr and FILE_ATTRIBUTE_DIRECTORY = 0) and
@@ -493,16 +507,35 @@ begin
       end else begin
         DokanFileInfo.Context :=
             ULONG64(handle); // save the file handle in Context
+
+        // Open succeed but we need to inform the driver
+        // that the dir open and not created by returning STATUS_OBJECT_NAME_COLLISION
+        if (creationDisposition = OPEN_ALWAYS) and
+           (fileAttr <> INVALID_FILE_ATTRIBUTES) then begin
+          Result := STATUS_OBJECT_NAME_COLLISION; Exit;
+        end;
       end;
     end;
   end else begin
     // It is a create file request
 
+    // Cannot overwrite a hidden or system file if flag not set
     if (fileAttr <> INVALID_FILE_ATTRIBUTES) and
-        (fileAttr and FILE_ATTRIBUTE_DIRECTORY <> 0) and
-        (CreateDisposition = FILE_CREATE) then begin
-      Result := STATUS_OBJECT_NAME_COLLISION; Exit; // File already exist because
-    end;                                   // GetFileAttributes found it
+            (((fileAttributesAndFlags and FILE_ATTRIBUTE_HIDDEN = 0) and
+             (fileAttr and FILE_ATTRIBUTE_HIDDEN <> 0)) or
+        ((fileAttributesAndFlags and FILE_ATTRIBUTE_SYSTEM = 0) and
+         (fileAttr and FILE_ATTRIBUTE_SYSTEM <> 0))) and
+            ((creationDisposition = TRUNCATE_EXISTING) or
+             (creationDisposition = CREATE_ALWAYS)) then begin
+      Result := STATUS_ACCESS_DENIED; Exit;
+    end;
+
+    // Truncate should always be used with write access
+    // TODO Dokan 1.1.0 move it to DokanMapStandardToGenericAccess
+    if (creationDisposition = TRUNCATE_EXISTING) then begin
+      genericDesiredAccess := genericDesiredAccess or GENERIC_WRITE;
+    end;
+
     handle := CreateFileW(
         filePath,
         genericDesiredAccess, // GENERIC_READ or GENERIC_WRITE or GENERIC_EXECUTE,
@@ -518,6 +551,13 @@ begin
 
       status := DokanNtStatusFromWin32(error);
     end else begin
+
+      //Need to update FileAttributes with previous when Overwrite file
+      if (fileAttr <> INVALID_FILE_ATTRIBUTES) and
+         (creationDisposition = TRUNCATE_EXISTING) then begin
+        SetFileAttributesW(filePath, fileAttributesAndFlags or fileAttr);
+      end;
+
       DokanFileInfo.Context :=
           ULONG64(handle); // save the file handle in Context
 
@@ -528,7 +568,7 @@ begin
           DbgPrint('\tOpen an already existing file\n');
           // Open succeed but we need to inform the driver
           // that the file open and not created by returning STATUS_OBJECT_NAME_COLLISION
-          Result := STATUS_OBJECT_NAME_COLLISION; Exit;
+          status := STATUS_OBJECT_NAME_COLLISION;
         end;
       end;
     end;
@@ -860,7 +900,7 @@ begin
              [HandleFileInformation.nFileSizeLow]);
   end;
 
-  DbgPrint('\n');
+  DbgPrint('FILE ATTRIBUTE  = %d\n', [HandleFileInformation.dwFileAttributes]);
 
   if (opened) then
     CloseHandle(handle);
@@ -884,7 +924,7 @@ begin
 
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
-  DbgPrint('FindFiles :%s\n', [filePath]);
+  DbgPrint('FindFiles : %s\n', [filePath]);
 
   fileLen := lstrlenW(filePath);
   if (filePath[fileLen - 1] <> '\') then begin
@@ -1192,7 +1232,7 @@ var
 begin
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
-  DbgPrint('SetFileAttributes %s\n', [filePath]);
+  DbgPrint('SetFileAttributes %s 0x%x\n', [filePath, FileAttributes]);
 
   if (not SetFileAttributesW(filePath, FileAttributes)) then begin
     error := GetLastError();
@@ -1276,6 +1316,7 @@ var
   handle: THandle;
   DesiredAccess: DWORD;
   error: DWORD;
+  securityDescriptorLength: DWORD;
 begin
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
@@ -1311,7 +1352,8 @@ begin
   end;
   DbgPrint('  Opening new handle with READ_CONTROL access\n');
   handle := CreateFileW(
-      filePath, DesiredAccess,
+      filePath,
+      DesiredAccess,
       FILE_SHARE_WRITE or FILE_SHARE_READ or FILE_SHARE_DELETE,
       nil, // security attribute
       OPEN_EXISTING,
@@ -1337,6 +1379,14 @@ begin
       Result := DokanNtStatusFromWin32(error); Exit;
     end;
   end;
+
+  // Ensure the Security Descriptor Length is set
+  securityDescriptorLength :=
+      GetSecurityDescriptorLength(SecurityDescriptor);
+  DbgPrint('  GetUserObjectSecurity return true,  *LengthNeeded = ' +
+           'securityDescriptorLength \n');
+  LengthNeeded := securityDescriptorLength;
+
   CloseHandle(handle);
 
   Result := STATUS_SUCCESS; Exit;
@@ -1396,27 +1446,30 @@ begin
   volumeRoot[3] := #0;
 
   if (GetVolumeInformationW(@volumeRoot[0], nil, 0, nil, MaximumComponentLength,
-        fsFlags, FileSystemNameBuffer, FileSystemNameSize)) then begin
+                           fsFlags, FileSystemNameBuffer,
+                           FileSystemNameSize)) then begin
 
     if (@FileSystemFlags <> nil) then
       FileSystemFlags := FileSystemFlags and fsFlags;
 
     if (@MaximumComponentLength <> nil) then begin
       DbgPrint('GetVolumeInformation: max component length %u\n',
-                 [MaximumComponentLength]);
+               [MaximumComponentLength]);
     end;
     if (@FileSystemNameBuffer <> nil) then begin
       DbgPrint('GetVolumeInformation: file system name %s\n',
-                 [FileSystemNameBuffer]);
+               [FileSystemNameBuffer]);
     end;
     if (@FileSystemFlags <> nil) then begin
       DbgPrint('GetVolumeInformation: got file system flags 0x%08x,' +
-          ' returning 0x%08x\n', [fsFlags, FileSystemFlags]);
+               ' returning 0x%08x\n',
+               [fsFlags, FileSystemFlags]);
     end;
   end else begin
 
     DbgPrint('GetVolumeInformation: unable to query underlying fs,' +
-               ' using defaults.  Last error = %u\n', [GetLastError()]);
+             ' using defaults.  Last error = %u\n',
+             [GetLastError()]);
 
     // File system name could be anything up to 10 characters.
     // But Windows check few feature availability based on file system name.

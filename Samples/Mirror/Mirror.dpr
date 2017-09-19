@@ -1,5 +1,5 @@
 // source: dokany/samples/dokan_mirror/mirror.c
-// commit: af8d4c68816abbf862690842cf9c72cd9bf3b041
+// commit: 8c3d8e219c9483cb4473549af2760e345d8f3966
 
 (*
   Dokan : user-mode file system library for Windows
@@ -1040,12 +1040,12 @@ begin
 
   error := GetLastError();
 
+  Windows.FindClose(hFind);
+
   if (error <> ERROR_NO_MORE_FILES) then begin
     DbgPrint('\tDeleteDirectory error code = %d\n\n', [error]);
     Result := DokanNtStatusFromWin32(error); Exit;
   end;
-
-  Windows.FindClose(hFind);
 
   Result := STATUS_SUCCESS; Exit;
 end;

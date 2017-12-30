@@ -15,6 +15,7 @@ uses
 type
   USHORT = Word;
   ULONG64 = UInt64;
+  PACCESS_MASK = ^ACCESS_MASK;
 
   _UNICODE_STRING = record
     Length: USHORT;

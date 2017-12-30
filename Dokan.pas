@@ -360,9 +360,9 @@ var
   DokanOpenRequestorToken: function (var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall = nil;
   DokanGetMountPointList: function (list: PDOKAN_CONTROL; length: ULONG; uncOnly: BOOL;
     var nbRead: ULONG): BOOL; stdcall = nil;
-  DokanMapKernelToUserCreateFileFlags: procedure (FileAttributes, CreateOptions, CreateDisposition: ULONG;
-    outFileAttributesAndFlags, outCreationDisposition: PDWORD); stdcall = nil;
-  DokanMapStandardToGenericAccess: function (DesiredAccess: ACCESS_MASK): ACCESS_MASK; stdcall = nil;
+  DokanMapKernelToUserCreateFileFlags: procedure (
+    DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions, CreateDisposition: ULONG;
+    outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags, outCreationDisposition: PDWORD); stdcall = nil;
   DokanNtStatusFromWin32: function (Error: DWORD): NTSTATUS; stdcall = nil;
 
 function DokanLoad(const LibFileName: string = DokanLibrary): Boolean;
@@ -381,9 +381,9 @@ function DokanResetTimeout(Timeout: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): 
 function DokanOpenRequestorToken(var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall;
 function DokanGetMountPointList(list: PDOKAN_CONTROL; length: ULONG; uncOnly: BOOL;
   var nbRead: ULONG): BOOL; stdcall;
-procedure DokanMapKernelToUserCreateFileFlags(FileAttributes, CreateOptions, CreateDisposition: ULONG;
-  outFileAttributesAndFlags, outCreationDisposition: PDWORD); stdcall;
-function DokanMapStandardToGenericAccess(DesiredAccess: ACCESS_MASK): ACCESS_MASK; stdcall;
+procedure DokanMapKernelToUserCreateFileFlags(
+  DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions, CreateDisposition: ULONG;
+  outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags, outCreationDisposition: PDWORD); stdcall;
 function DokanNtStatusFromWin32(Error: DWORD): NTSTATUS; stdcall;
 
 {$endif DOKAN_EXPLICIT_LINK}
@@ -424,7 +424,6 @@ begin
   DokanOpenRequestorToken := GetProc('DokanOpenRequestorToken');
   DokanGetMountPointList := GetProc('DokanGetMountPointList');
   DokanMapKernelToUserCreateFileFlags := GetProc('DokanMapKernelToUserCreateFileFlags');
-  DokanMapStandardToGenericAccess := GetProc('DokanMapStandardToGenericAccess');
   DokanNtStatusFromWin32 := GetProc('DokanNtStatusFromWin32');
 
   if not Result then
@@ -447,7 +446,6 @@ begin
   DokanOpenRequestorToken := nil;
   DokanGetMountPointList := nil;
   DokanMapKernelToUserCreateFileFlags := nil;
-  DokanMapStandardToGenericAccess := nil;
   DokanNtStatusFromWin32 := nil;
 
   FreeLibrary(DokanLibHandle);
@@ -467,7 +465,6 @@ function DokanResetTimeout; external DokanLibrary;
 function DokanOpenRequestorToken; external DokanLibrary;
 function DokanGetMountPointList; external DokanLibrary;
 procedure DokanMapKernelToUserCreateFileFlags; external DokanLibrary;
-function DokanMapStandardToGenericAccess; external DokanLibrary;
 function DokanNtStatusFromWin32; external DokanLibrary;
 
 {$endif DOKAN_EXPLICIT_LINK}

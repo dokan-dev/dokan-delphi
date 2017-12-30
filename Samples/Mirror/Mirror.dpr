@@ -1,5 +1,5 @@
 // source: dokany/samples/dokan_mirror/mirror.c
-// commit: 8c3d8e219c9483cb4473549af2760e345d8f3966
+// commit: 5639855014e514387406435433fca1ad855e631d
 
 (*
   Dokan : user-mode file system library for Windows
@@ -172,6 +172,7 @@ var
   g_UseStdErr: Boolean;
   g_DebugMode: Boolean;
   g_HasSeSecurityPrivilege: Boolean;
+  g_ImpersonateCallerUser: Boolean;
 
 procedure DbgPrint(format: string; const args: array of const); overload;
 var
@@ -342,6 +343,8 @@ var
   error: DWORD;
   securityAttrib: SECURITY_ATTRIBUTES;
   genericDesiredAccess: ACCESS_MASK;
+  // userTokenHandle is for Impersonate Caller User Option
+  userTokenHandle: THandle;
 begin
   status := STATUS_SUCCESS;
 
@@ -351,10 +354,8 @@ begin
   securityAttrib.bInheritHandle := False;
 
   DokanMapKernelToUserCreateFileFlags(
-      FileAttributes, CreateOptions, CreateDisposition, @fileAttributesAndFlags,
-      @creationDisposition);
-
-  genericDesiredAccess := DokanMapStandardToGenericAccess(DesiredAccess);
+      DesiredAccess, FileAttributes, CreateOptions, CreateDisposition,
+      @genericDesiredAccess, @fileAttributesAndFlags, @creationDisposition);
 
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
@@ -467,11 +468,29 @@ begin
     DbgPrint('\tUNKNOWN creationDisposition!\n');
   end;
 
+  if (g_ImpersonateCallerUser) then begin
+    userTokenHandle := DokanOpenRequestorToken(DokanFileInfo);
+
+    if (userTokenHandle = INVALID_HANDLE_VALUE) then begin
+      DbgPrint('  DokanOpenRequestorToken failed\n');
+      // Should we return some error?
+    end;
+  end;
+
   if (DokanFileInfo.IsDirectory) then begin
     // It is a create directory request
 
     if (creationDisposition = CREATE_NEW) or
        (creationDisposition = OPEN_ALWAYS) then begin
+
+      if (g_ImpersonateCallerUser) then begin
+        // if g_ImpersonateCallerUser option is on, call the ImpersonateLoggedOnUser function.
+        if (not ImpersonateLoggedOnUser(userTokenHandle)) then begin
+          // handle the error if failed to impersonate
+          DbgPrint('\tImpersonateLoggedOnUser failed.\n');
+        end;
+      end;
+
       //We create folder
       if (not CreateDirectoryW(filePath, @securityAttrib)) then begin
         error := GetLastError();
@@ -481,6 +500,11 @@ begin
           DbgPrint('\terror code = %d\n\n', [error]);
           status := DokanNtStatusFromWin32(error);
         end;
+      end;
+
+      if (g_ImpersonateCallerUser) then begin
+        // Clean Up operation for impersonate
+        RevertToSelf();
       end;
     end;
 
@@ -493,11 +517,24 @@ begin
         Result := STATUS_NOT_A_DIRECTORY; Exit;
       end;
 
+      if (g_ImpersonateCallerUser) then begin
+        // if g_ImpersonateCallerUser option is on, call the ImpersonateLoggedOnUser function.
+        if (not ImpersonateLoggedOnUser(userTokenHandle)) then begin
+          // handle the error if failed to impersonate
+          DbgPrint('\tImpersonateLoggedOnUser failed.\n');
+        end;
+      end;
+
       // FILE_FLAG_BACKUP_SEMANTICS is required for opening directory handles
       handle :=
           CreateFileW(filePath, genericDesiredAccess, ShareAccess,
                      @securityAttrib, OPEN_EXISTING,
                      fileAttributesAndFlags or FILE_FLAG_BACKUP_SEMANTICS, 0);
+
+      if (g_ImpersonateCallerUser) then begin
+        // Clean Up operation for impersonate
+        RevertToSelf();
+      end;
 
       if (handle = INVALID_HANDLE_VALUE) then begin
         error := GetLastError();
@@ -521,19 +558,33 @@ begin
 
     // Cannot overwrite a hidden or system file if flag not set
     if (fileAttr <> INVALID_FILE_ATTRIBUTES) and
-            (((fileAttributesAndFlags and FILE_ATTRIBUTE_HIDDEN = 0) and
-             (fileAttr and FILE_ATTRIBUTE_HIDDEN <> 0)) or
-        ((fileAttributesAndFlags and FILE_ATTRIBUTE_SYSTEM = 0) and
-         (fileAttr and FILE_ATTRIBUTE_SYSTEM <> 0))) and
-            ((creationDisposition = TRUNCATE_EXISTING) or
-             (creationDisposition = CREATE_ALWAYS)) then begin
+        (((fileAttributesAndFlags and FILE_ATTRIBUTE_HIDDEN = 0) and
+          (fileAttr and FILE_ATTRIBUTE_HIDDEN <> 0)) or
+         ((fileAttributesAndFlags and FILE_ATTRIBUTE_SYSTEM = 0) and
+          (fileAttr and FILE_ATTRIBUTE_SYSTEM <> 0))) and
+        ((creationDisposition = TRUNCATE_EXISTING) or
+         (creationDisposition = CREATE_ALWAYS)) then begin
       Result := STATUS_ACCESS_DENIED; Exit;
     end;
 
+    // Cannot delete a read only file
+    if (((fileAttr <> INVALID_FILE_ATTRIBUTES) and
+             (fileAttr and FILE_ATTRIBUTE_READONLY <> 0) or
+         (fileAttributesAndFlags and FILE_ATTRIBUTE_READONLY <> 0)) and
+        (fileAttributesAndFlags and FILE_FLAG_DELETE_ON_CLOSE <> 0)) then begin
+      Result := STATUS_CANNOT_DELETE; Exit;
+    end;
+
     // Truncate should always be used with write access
-    // TODO Dokan 1.1.0 move it to DokanMapStandardToGenericAccess
-    if (creationDisposition = TRUNCATE_EXISTING) then begin
+    if (creationDisposition = TRUNCATE_EXISTING) then
       genericDesiredAccess := genericDesiredAccess or GENERIC_WRITE;
+
+    if (g_ImpersonateCallerUser) then begin
+      // if g_ImpersonateCallerUser option is on, call the ImpersonateLoggedOnUser function.
+      if (not ImpersonateLoggedOnUser(userTokenHandle)) then begin
+        // handle the error if failed to impersonate
+        DbgPrint('\tImpersonateLoggedOnUser failed.\n');
+      end;
     end;
 
     handle := CreateFileW(
@@ -544,6 +595,11 @@ begin
         creationDisposition,
         fileAttributesAndFlags, // or FILE_FLAG_NO_BUFFERING,
         0);                  // template file handle
+
+    if (g_ImpersonateCallerUser) then begin
+      // Clean Up operation for impersonate
+      RevertToSelf();
+    end;
 
     if (handle = INVALID_HANDLE_VALUE) then begin
       error := GetLastError();
@@ -1234,10 +1290,18 @@ begin
 
   DbgPrint('SetFileAttributes %s 0x%x\n', [filePath, FileAttributes]);
 
-  if (not SetFileAttributesW(filePath, FileAttributes)) then begin
-    error := GetLastError();
-    DbgPrint('\terror code = %d\n\n', [error]);
-    Result := DokanNtStatusFromWin32(error); Exit;
+  if (FileAttributes <> 0) then begin
+    if (not SetFileAttributesW(filePath, FileAttributes)) then begin
+      error := GetLastError();
+      DbgPrint('\terror code = %d\n\n', [error]);
+      Result := DokanNtStatusFromWin32(error); Exit;
+    end;
+  end else begin
+    // case FileAttributes == 0 :
+    // MS-FSCC 2.6 File Attributes : There is no file attribute with the value 0x00000000
+    // because a value of 0x00000000 in the FileAttributes field means that the file attributes for this file MUST NOT be changed when setting basic information for the file
+    DbgPrint('Set 0 to FileAttributes means MUST NOT be changed. Didn''t call ' +
+             'SetFileAttributes function. \n');
   end;
 
   DbgPrint('\n');
@@ -1608,6 +1672,7 @@ begin
     '  /o (use mount manager)\t\t\t Register device to Windows mount manager.\n\t\t\t\t\t\t This enables advanced Windows features like recycle bin and more...\n' +
     '  /c (mount for current session only)\t\t Device only visible for current user session.\n' +
     '  /u (UNC provider name ex. \\localhost\\myfs)\t UNC name used for network volume.\n' +
+    '  /p (Impersonate Caller User)\t\t\t Impersonate Caller User when getting the handle in CreateFile for operations.\n\t\t\t\t\t\t This option requires administrator right to work properly.\n' +
     '  /a Allocation unit size (ex. /a 512)\t\t Allocation Unit Size of the volume. This will behave on the disk file size.\n' +
     '  /k Sector size (ex. /k 512)\t\t\t Sector Size of the volume. This will behave on the disk file size.\n' +
     '  /f User mode Lock\t\t\t\t Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it.\n' +
@@ -1697,6 +1762,9 @@ begin
         dokanOptions^.UNCName := UNCName;
         DbgPrint('UNC Name: %s\n', [UNCName]);
       end;
+      'P': begin
+        g_ImpersonateCallerUser := True;
+      end;
       'I': begin
         Inc(command);
         dokanOptions^.Timeout := StrToInt(argv[command]);
@@ -1763,6 +1831,14 @@ begin
              #09'=> GetFileSecurity/SetFileSecurity may not work properly');
     Writeln(ErrOutput, #09'=> Please restart mirror sample with administrator ' +
                      'rights to fix it');
+  end;
+
+  if (g_ImpersonateCallerUser and not g_HasSeSecurityPrivilege) then begin
+    Writeln(ErrOutput, 'Impersonate Caller User requires administrator right to ' +
+                     'work properly\n');
+    Writeln(ErrOutput, #09'=> Other users may not use the drive properly\n');
+    Writeln(ErrOutput, #09'=> Please restart mirror sample with administrator ' +
+                     'rights to fix it\n');
   end;
 
   if (g_DebugMode) then begin

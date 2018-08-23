@@ -1,16 +1,16 @@
-# Dokan.Delphi Binding
+# Dokan Delphi/FreePascal Binding
 
-## What is Dokan.Delphi Binding
+## What is Dokan Delphi/FreePascal Binding
 By using Dokan library, you can create your own file systems very easily
-without writing device driver. Dokan.Delphi Binding is a library that allows
-you to make a file system on .NET environment.
+without writing device driver. Dokan Delphi/FreePascal Binding is a library that allows
+you to make a file system on Win32/Win64 environment.
 
 ## Licensing
-Dokan.NET Binding is distributed under a version of the "MIT License",
+Dokan Delphi/FreePascal Binding is distributed under a version of the "MIT License",
 which is a BSD-like license. See the 'license.mit.txt' file for details.
 
 ##Environment
-Delphi and Dokan library
+Delphi/FreePascal and Dokan library
 
 ## How to write a file system
 To make a file system, an application needs to implement IDokanOperations interface.
@@ -26,3 +26,4 @@ Just run the bellow command or your file system application call Dokan.Unmount
 to unmount a drive.
 
    > dokanctl.exe /u DriveLetter
+   

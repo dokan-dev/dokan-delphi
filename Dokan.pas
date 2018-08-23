@@ -1,24 +1,31 @@
+// Release 1.2.0.1000
+// commit: f6de99b914b8f858acf940073ae8836eb476de7f
+
 (*
   Dokan : user-mode file system library for Windows
 
-  Copyright (C) 2015 - 2017 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
+  Copyright (C) 2015 - 2018 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
   Copyright (C) 2007 - 2011 Hiroki Asakawa <info@dokan-dev.net>
 
-  http://dokan-dev.github.io
+  https://dokan-dev.github.io/
 
-  Delphi header translation by Vincent Forman (vincent.forman@gmail.com)
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-This program is free software; you can redistribute it and/or modify it under
-the terms of the GNU Lesser General Public License as published by the Free
-Software Foundation; either version 3 of the License, or (at your option) any
-later version.
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-
-You should have received a copy of the GNU Lesser General Public License along
-with this program. If not, see <http://www.gnu.org/licenses/>.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 *)
 
 unit Dokan;
@@ -38,18 +45,22 @@ uses
 const
   DokanLibrary = 'dokan1.dll';
 
-  DOKAN_VERSION = 100;
+  //The current Dokan version (ver 1.2.0)
+  DOKAN_VERSION = 120;
+  //Minimum Dokan version (ver 1.1.0) accepted
+  DOKAN_MINIMUM_COMPATIBLE_VERSION = 110;
   DOKAN_MAX_INSTANCES = 32;
 
-  DOKAN_OPTION_DEBUG = 1;
-  DOKAN_OPTION_STDERR = 2;
-  DOKAN_OPTION_ALT_STREAM = 4;
-  DOKAN_OPTION_WRITE_PROTECT = 8;
-  DOKAN_OPTION_NETWORK = 16;
-  DOKAN_OPTION_REMOVABLE = 32;
-  DOKAN_OPTION_MOUNT_MANAGER = 64;
-  DOKAN_OPTION_CURRENT_SESSION = 128;
-  DOKAN_OPTION_FILELOCK_USER_MODE = 256;
+  DOKAN_OPTION_DEBUG = 1;                //Enable ouput debug message
+  DOKAN_OPTION_STDERR = 2;               //Enable ouput debug message to stderr
+  DOKAN_OPTION_ALT_STREAM = 4;           //Use alternate stream
+  DOKAN_OPTION_WRITE_PROTECT = 8;        //Enable mount drive as write-protected
+  DOKAN_OPTION_NETWORK = 16;             //Use network drive - Dokan network provider needs to be installed
+  DOKAN_OPTION_REMOVABLE = 32;           //Use removable drive
+  DOKAN_OPTION_MOUNT_MANAGER = 64;       //Use mount manager
+  DOKAN_OPTION_CURRENT_SESSION = 128;    //Mount the drive on current session only
+  DOKAN_OPTION_FILELOCK_USER_MODE = 256; //Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it
+
 
 type
   _DOKAN_ACCESS_STATE = record
@@ -470,6 +481,7 @@ function DokanNtStatusFromWin32; external DokanLibrary;
 {$endif DOKAN_EXPLICIT_LINK}
 
 initialization
+
 finalization
 
 {$ifdef DOKAN_EXPLICIT_LINK}

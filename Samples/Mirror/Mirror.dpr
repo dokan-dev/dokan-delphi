@@ -1,13 +1,14 @@
+// Release 1.2.0.1000
 // source: dokany/samples/dokan_mirror/mirror.c
-// commit: 5639855014e514387406435433fca1ad855e631d
+// commit: f6de99b914b8f858acf940073ae8836eb476de7f
 
 (*
   Dokan : user-mode file system library for Windows
 
-  Copyright (C) 2015 - 2017 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
+  Copyright (C) 2015 - 2018 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
   Copyright (C) 2007 - 2011 Hiroki Asakawa <info@dokan-dev.net>
 
-  http://dokan-dev.github.io
+  https://dokan-dev.github.io/
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -208,7 +209,7 @@ begin
   if (unclen > 0) and (_wcsnicmp(FileName, UNCName, unclen) = 0) then begin
     if (_wcsnicmp(FileName + unclen, '.', 1) <> 0) then begin
       wcsncat_s(filePath, numberOfElements, FileName + unclen,
-                lstrlenW(FileName) - unclen);
+                size_t(lstrlenW(FileName)) - unclen);
     end;
   end else begin
     wcsncat_s(filePath, numberOfElements, FileName, lstrlenW(FileName));
@@ -475,7 +476,8 @@ begin
       DbgPrint('  DokanOpenRequestorToken failed\n');
       // Should we return some error?
     end;
-  end;
+  end else
+    userTokenHandle := INVALID_HANDLE_VALUE; //to prevent compiler-warning
 
   if (DokanFileInfo.IsDirectory) then begin
     // It is a create directory request
@@ -787,8 +789,6 @@ begin
     opened := True;
   end;
 
-  fileSize := 0;
-  fileSizeLow := 0;
   fileSizeHigh := 0;
   fileSizeLow := GetFileSize(handle, @fileSizeHigh);
   if (fileSizeLow = INVALID_FILE_SIZE) then begin
@@ -821,7 +821,7 @@ begin
       end;
 
       if ((UINT64(Offset) + NumberOfBytesToWrite) > fileSize) then begin
-        bytes := fileSize - Offset;
+        bytes := fileSize - UINT64(Offset);
         if (bytes shr 32 <> 0) then begin
           NumberOfBytesToWrite := DWORD(bytes and $FFFFFFFF);
         end else begin
@@ -1119,8 +1119,6 @@ var
   renameInfo: PFILE_RENAME_INFO;
   error: DWORD;
 begin
-  renameInfo := nil;
-
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
   GetFilePath(newFilePath, DOKAN_MAX_PATH, NewFileName);
 

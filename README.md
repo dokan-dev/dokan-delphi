@@ -9,7 +9,7 @@ you to make a file system on Win32/Win64 environment.
 Dokan Delphi/FreePascal Binding is distributed under a version of the "MIT License",
 which is a BSD-like license. See the 'license.mit.txt' file for details.
 
-##Environment
+## Environment
 Delphi/FreePascal and Dokan library
 
 ## How to write a file system

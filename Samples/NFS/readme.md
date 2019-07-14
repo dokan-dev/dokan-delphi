@@ -10,3 +10,16 @@ NFS_dokan run without arguments will give the possible options.<br/>
 Below a simple command line to mount a nfs export on X:<br/>
 NFS_DOKAN.exe /r "nfs://192.168.1.248/volume1/download/" /l x<br/>
 
+The below file system operations have been tested successfully :<br/>
+directory listing <br/>
+directory browsing <br/>
+create directory <br/>
+rename directory <br/>
+create file <br/>
+rename file <br/>
+read file (except vlc? but videos still read fine in chrome...)<br/>
+write file (i truncate the file by default on the first write. to be reviewed in the future) <br/>
+copy/paste file<br/>
+delete file<br/>
+delete directory<br/>
+

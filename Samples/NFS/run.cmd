@@ -1,0 +1,1 @@
+NFS_DOKAN.exe /r "nfs://192.168.1.248/volume1/download/" /l x /d /s

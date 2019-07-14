@@ -42,6 +42,12 @@ interface
 uses
   Windows, DokanWin;
 
+{$ifndef FPC}
+type
+  ULONGLONG = UInt64;
+  //LPCWSTR=pwidechar;
+{$endif}  
+
 const
   DokanLibrary = 'dokan1.dll';
 

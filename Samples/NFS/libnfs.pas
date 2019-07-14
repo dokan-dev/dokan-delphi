@@ -159,9 +159,7 @@ var
 procedure lib_init;
 procedure lib_free;
 function nfsdiscover(items:tstrings):boolean;
-function nfsreadfile2(path,local:string):boolean;
-function nfswritefile2(path,local:string):int64;
-function nfsreadfile3(path:string):boolean;
+
 
 var
 fLibHandle:thandle=thandle(-1);
@@ -265,124 +263,7 @@ if srv<>nil then free_nfs_srvr_list(srv);
 end;
 end;
 
-function nfsreadfile2(path,local:string):boolean;
-var
-nfsfh:pointer;
-stat:nfs_stat_64;
-buf:array[0..4096-1] of char;
-count:integer;
-//
-FS: TFileStream;
-filename:string;
-begin
-result:=false;
-if nfs=nil then exit;
-//context-full vs context-free?
-if nfs_open (nfs,pchar(path) ,O_RDONLY ,@nfsfh)<>0  then raise exception.create(strpas( nfs_get_error(nfs)));
-//
-//if nfs_fstat64(nfs,nfsfh,@stat)<>0 then raise exception.create(strpas( nfs_get_error(nfs)));
-//
-fillchar(buf,sizeof(buf),0);
-count := nfs_read(nfs, nfsfh, sizeof(buf), @buf[0]);
-if count<0 then
-  begin
-  nfs_close(nfs, nfsfh);
-  raise exception.create(strpas( nfs_get_error(nfs)));
-  //exit;
-  end
-  else
-  begin
-  filename:=local;
-  FS := TFileStream.Create(filename, fmOpenReadWrite or fmcreate);
-  FS.Write(buf[0], count);
-  while count>0 do
-  begin
-  fillchar(buf,sizeof(buf),0);
-  count := nfs_read(nfs, nfsfh, sizeof(buf), @buf[0]);
-  if count>0 then FS.Write(buf[0], count);
-  end;
-  FS.Free;
-  result:=true;
-  end;//if count<0 then
 
-//
-if nfs_close(nfs, nfsfh)<>0 then ;//raise exception.create(strpas( nfs_get_error(nfs)));
-end;
-
-function nfsreadfile3(path:string):boolean;
-var
-nfsfh:pointer;
-stat:nfs_stat_64;
-buf:array[0..4096-1] of char;
-count:integer;
-//
-FS: TFileStream;
-begin
-result:=false;
-if nfs=nil then exit;
-//context-full vs context-free?
-if nfs_open (nfs,pchar(path) ,O_RDONLY ,@nfsfh)<>0  then raise exception.create(strpas( nfs_get_error(nfs)));
-//
-//if nfs_fstat64(nfs,nfsfh,@stat)<>0 then raise exception.create(strpas( nfs_get_error(nfs)));
-//
-fillchar(buf,sizeof(buf),0);
-count := nfs_read(nfs, nfsfh, sizeof(buf), @buf[0]);
-if count<0 then
-  begin
-  nfs_close(nfs, nfsfh);
-  raise exception.create(strpas( nfs_get_error(nfs)));
-  end
-  else
-  begin
-  {$i-}write(buf);{$i+}
-  while count>0 do
-  begin
-  fillchar(buf,sizeof(buf),0);
-  count := nfs_read(nfs, nfsfh, sizeof(buf), @buf[0]);
-  if count>0 then {$i-}write(buf);{$i+}
-  end;
-  result:=true;
-  end;//if count<0 then
-
-//
-if nfs_close(nfs, nfsfh)<>0 then ;//raise exception.create(strpas( nfs_get_error(nfs)));
-end;
-
-function nfswritefile2(path,local:string):int64;
-var
-nfsfh:pointer;
-stat:nfs_stat_64;
-buf:array[0..4096-1] of char;
-count:integer;
-//
-FS: TFileStream;
-filename:string;
-begin
-result:=0;
-if nfs=nil then exit;
-//context-full vs context-free
-if nfs_creat(nfs,pchar(path),O_CREAT or O_RDWR,@nfsfh)<>0 then raise exception.create(strpas( nfs_get_error(nfs)));
-//
-  filename:=local;
-  FS := TFileStream.Create(filename, fmOpenRead);
-  while fs.Position < fs.Size do
-  begin
-  count:=FS.read(buf[0], 4096);
-  if nfs_write(nfs, nfsfh, count, @buf[0])<>count  then
-    begin
-    nfs_close(nfs, nfsfh);
-    raise exception.create('nfs_write error');
-    //break;
-    end;
-  end;
-  FS.Free;
-//
-if nfs_fstat64(nfs,nfsfh,@stat)<>0
-  then //showmessage(strpas( nfs_get_error(nfs)));
-  else result:=stat.nfs_size ;
-//
-if nfs_close(nfs, nfsfh)<>0 then ; //raise exception.create(strpas( nfs_get_error(nfs)));
-end;
 
 end.
 

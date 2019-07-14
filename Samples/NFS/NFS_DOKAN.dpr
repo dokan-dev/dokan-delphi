@@ -801,7 +801,7 @@ end;
 procedure ShowUsage();
 begin
     Write(ErrOutput, escape_replace('progam.exe\n' +
-    //'  /r RootDirectory (ex. /r c:\\test)\t\t Directory source to mirror.\n' +
+    '  /r NfsUrl (ex. /r nfs://server/export/)\t\t NFS export to map.\n' +
     '  /l MountPoint (ex. /l m)\t\t\t Mount point. Can be M:\\ (drive letter) or empty NTFS folder C:\\mount\\dokan .\n' +
     '  /t ThreadCount (ex. /t 5)\t\t\t Number of threads to be used internally by Dokan library.\n\t\t\t\t\t\t More threads will handle more event at the same time.\n' +
     '  /d (enable debug output)\t\t\t Enable debug output to an attached debugger.\n' +
@@ -818,6 +818,7 @@ begin
     '  /f User mode Lock\t\t\t\t Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it.\n' +
     '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
     'Examples:\n' +
+    '\tprogram.exe /discover\n' +
     '\tprogram.exe /r C:\\Users /l M:\t\t\t# Mirror C:\\Users as RootDirectory into a drive of letter M:\\.\n' +
     '\tprogram.exe /r C:\\Users /l C:\\mount\\dokan\t# Mirror C:\\Users as RootDirectory into NTFS folder C:\\mount\\dokan.\n' +
     '\tprogram.exe /r C:\\Users /l M: /n /u \\myfs\\myfs1\t# Mirror C:\\Users as RootDirectory into a network drive M:\\. with UNC \\\\myfs\\myfs1\n\n' +

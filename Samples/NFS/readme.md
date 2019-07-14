@@ -8,7 +8,10 @@ Todo : have dokan and libnfs use the same VC runtime (preferably the generic msv
 
 NFS_dokan run without arguments will give the possible options.<br/>
 Below a simple command line to mount a nfs export on X:<br/>
-NFS_DOKAN.exe /r "nfs://192.168.1.248/volume1/download/" /l x<br/>
+NFS_DOKAN.exe /r "nfs://192.168.1.248/volume2/public/" /l x<br/>
+
+You can discover nfs exports on your lan with the below command:<br/>
+NFS_DOKAN.exe /discover<br/>
 
 The below file system operations have been tested successfully :<br/>
 directory listing <br/>

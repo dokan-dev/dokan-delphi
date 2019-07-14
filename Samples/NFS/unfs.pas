@@ -4,7 +4,7 @@ unit unfs;
 
 interface
 
-uses windows,sysutils,winsock,
+uses windows,sysutils,classes,
     libnfs,
     Dokan,DokanWin ;
 
@@ -48,6 +48,7 @@ function _CreateFile(FileName: LPCWSTR; var SecurityContext: DOKAN_IO_SECURITY_C
 
 function _nfsMount(mount:string):boolean;
 function _nfsUnmount: boolean;
+function _nfsdiscover(items:tstrings):boolean;
 
 implementation
 
@@ -529,13 +530,11 @@ end;
 
 function _nfsmount(mount:string):boolean;
 var
-  wsaData: TWSAData;
   url: pnfs_url;
 begin
 result:=false;
 
-  lib_init ;
-WSAStartup(MAKEWORD(2,2), wsaData);
+if libnfs.fLibHandle =thandle(-1) then lib_init;
 
 if nfs=nil then nfs:=nfs_init_context;
 url:=nil;
@@ -573,6 +572,13 @@ begin
   lib_free;
   result:=true
 end;
+
+function _nfsdiscover(items:tstrings):boolean;
+begin
+result:=nfsdiscover(items); 
+end;
+
+
 
 end.
  

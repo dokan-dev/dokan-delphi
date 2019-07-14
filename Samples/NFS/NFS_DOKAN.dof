@@ -100,7 +100,7 @@ Conditionals=
 DebugSourceDirs=
 UsePackages=0
 [Parameters]
-RunParams=/r "nfs://192.168.1.248/volume1/public/" /l x
+RunParams=/discover
 HostApplication=
 Launcher=
 UseLauncher=0

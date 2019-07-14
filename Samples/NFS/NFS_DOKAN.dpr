@@ -55,7 +55,7 @@ delete dir ok
 
 uses
   Windows,
-  SysUtils,
+  SysUtils,classes,
   Math,
   Dokan in '..\..\Dokan.pas',
   DokanWin in '..\..\DokanWin.pas',
@@ -830,9 +830,24 @@ var
   command: ULONG;
   dokanOperations: PDOKAN_OPERATIONS;
   dokanOptions: PDOKAN_OPTIONS;
+  servers:tstrings;
+  i:byte;
 begin
 //
 
+if pos('/discover',lowercase(cmdline))>0 then
+  begin
+
+    servers:=tstringlist.create;
+    try
+    if _nfsdiscover(servers )=false then exit;
+    for i:=0 to servers.Count -1 do writeln(servers[i]);
+    except
+    on e:exception do writeln(e.message);
+    end;
+    servers.Free;
+    exit;
+  end;
 
 //
   New(dokanOperations);
@@ -1060,8 +1075,8 @@ var
 begin
   IsMultiThread := True;
 
-  lstrcpyW(RootDirectory, 'C:');
-  lstrcpyW(MountPoint, 'M:\');
+  lstrcpyW(RootDirectory, 'nfs://192.168.1.248/volume2/public/');
+  lstrcpyW(MountPoint, 'X:\');
   lstrcpyW(UNCName, '');
 
   argc := 1 + ParamCount();

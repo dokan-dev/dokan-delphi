@@ -3,7 +3,7 @@ unit libnfs;
 
 interface
 
-uses windows,sysutils,classes;
+uses windows,sysutils,classes,winsock;
 
 const
 O_RDONLY=	$0000;		//* open for reading only */
@@ -176,6 +176,8 @@ FreeLibrary(fLibHandle);
 end;
 
 procedure lib_init;
+var
+wsaData: TWSAData;
 begin
 fLibHandle:=thandle(-1);
 fLibHandle:=LoadLibraryA(PAnsiChar('libnfs.dll'));
@@ -184,6 +186,8 @@ if fLibHandle <=0 then
   raise exception.create('LoadLibraryA failed');
   exit;
   end;
+//
+WSAStartup(MAKEWORD(2,2), wsaData);
 //
 @nfs_init_context:=GetProcAddress(fLibHandle,'nfs_init_context');
 @nfs_parse_url_full:=GetProcAddress(fLibHandle,'nfs_parse_url_full');
@@ -252,13 +256,14 @@ srv:=nil;
 srv:=nfs_find_local_servers;
 if srv<>nil then
 begin
+result:=true;
 p1:=srv;
 if p1^.addr<>nil then nfsgetexports(strpas(p1^.addr ),Items );
 while p1^.next<>nil do
-begin
-p1:=p1^.next;
-if p1^.addr<>nil then nfsgetexports(strpas(p1^.addr ),Items );
-end;
+  begin
+  p1:=p1^.next;
+  if p1^.addr<>nil then nfsgetexports(strpas(p1^.addr ),Items );
+  end;
 if srv<>nil then free_nfs_srvr_list(srv);
 end;
 end;

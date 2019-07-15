@@ -546,8 +546,8 @@ if url=nil  then
   end;
 //try root ?
 try
-nfs_set_uid(nfs, 0);
-nfs_set_gid(nfs, 0);
+//nfs_set_uid(nfs, 0);
+//nfs_set_gid(nfs, 0);
 except
 end;
 

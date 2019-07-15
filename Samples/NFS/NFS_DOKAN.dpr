@@ -411,8 +411,9 @@ var
 begin
   DbgPrint('WriteFile : %s, offset %d, length %d\n', [FileName, Offset,
            NumberOfBytesToWrite]);
-
-  result:=_WriteFile(FileName,Buffer,NumberOfBytesToWrite,NumberOfBytesWritten,Offset,DokanFileInfo);
+  if dokanOptions^.Options and DOKAN_OPTION_WRITE_PROTECT<>0
+    then result:= STATUS_SUCCESS;
+    else result:=_WriteFile(FileName,Buffer,NumberOfBytesToWrite,NumberOfBytesWritten,Offset,DokanFileInfo);
 
 end;
 
@@ -812,9 +813,9 @@ begin
     '  /o (use mount manager)\t\t\t Register device to Windows mount manager.\n\t\t\t\t\t\t This enables advanced Windows features like recycle bin and more...\n' +
     '  /c (mount for current session only)\t\t Device only visible for current user session.\n' +
     '  /u (UNC provider name ex. \\localhost\\myfs)\t UNC name used for network volume.\n' +
-    '  /p (Impersonate Caller User)\t\t\t Impersonate Caller User when getting the handle in CreateFile for operations.\n\t\t\t\t\t\t This option requires administrator right to work properly.\n' +
-    '  /a Allocation unit size (ex. /a 512)\t\t Allocation Unit Size of the volume. This will behave on the disk file size.\n' +
-    '  /k Sector size (ex. /k 512)\t\t\t Sector Size of the volume. This will behave on the disk file size.\n' +
+    //'  /p (Impersonate Caller User)\t\t\t Impersonate Caller User when getting the handle in CreateFile for operations.\n\t\t\t\t\t\t This option requires administrator right to work properly.\n' +
+    //'  /a Allocation unit size (ex. /a 512)\t\t Allocation Unit Size of the volume. This will behave on the disk file size.\n' +
+    //'  /k Sector size (ex. /k 512)\t\t\t Sector Size of the volume. This will behave on the disk file size.\n' +
     '  /f User mode Lock\t\t\t\t Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it.\n' +
     '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
     'Examples:\n' +

@@ -1,12 +1,11 @@
 Mount a windows logical drive against a NFS export using Dokan and Libnfs (https://github.com/sahlberg/libnfs).<br/>
 
-Dokan can either be installed manually (see manual_install_md.zip or manual_install_mt.zip) or using the official installer (https://github.com/dokan-dev/dokany/releases).<br/>
-
 Dokan is built against VC 2017 (you need the VC2017 runtime - see installation.txt).<br/>
-Libnfs is built against VC 2010 (you need the VC2010 runtime - msvcr100.dll is provided next to libnfs.dll).<br/>
+Libnfs is built against VC 2010 (you need the VC2010 runtime - both msvcr100.dll and libnfs.dll are provided here).<br/>
 Todo : have dokan and libnfs use the same VC runtime (preferably the generic msvcrt.dll).<br/>
 
 NFS_dokan run without arguments will give the possible options.<br/>
+
 Below a simple command line to mount a nfs export on X:<br/>
 NFS_DOKAN.exe /r "nfs://192.168.1.248/volume2/public/" /l x<br/>
 

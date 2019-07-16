@@ -1,4 +1,6 @@
-Mount a windows logical drive against a NFS export using Dokan and Libnfs (https://github.com/sahlberg/libnfs).<br/>
+Mount a windows logical drive against a NFS export using :<br/>
+Dokan (https://github.com/dokan-dev/dokany) <br/>
+Libnfs (https://github.com/sahlberg/libnfs) <br/>
 
 Dokan is built against VC 2017 (you need the VC2017 runtime - see installation.txt).<br/>
 Libnfs is built against VC 2010 (you need the VC2010 runtime - both msvcr100.dll and libnfs.dll are provided here).<br/>

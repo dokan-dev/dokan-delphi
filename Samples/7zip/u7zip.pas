@@ -306,6 +306,7 @@ Result := STATUS_SUCCESS;
 path := WideCharToString(filename);
 //writeln('CreateFile:'+path);
 if path='\' then exit;
+if arch=nil then exit;
 
 i:=filename_to_index(path);
 if i=-1 then

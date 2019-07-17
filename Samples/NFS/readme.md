@@ -17,3 +17,5 @@ NFS_DOKAN.exe /discover<br/>
 The below file system operations have been tested successfully :<br/>
 directory listing, directory browsing, create directory, rename directory, create file, rename file, read file, write file, copy/paste file, delete file, delete directory.
 
+![Screenshot](screenshot.png)
+

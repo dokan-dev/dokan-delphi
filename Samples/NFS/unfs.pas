@@ -172,6 +172,8 @@ var
 begin
   result:=STATUS_NO_SUCH_FILE;
 
+  //writeln('_GetFileInformation:'+FileName);
+
 path := WideCharToString(filename);
 path:=stringreplace(path,'\','/',[rfReplaceAll, rfIgnoreCase]);
 
@@ -187,6 +189,7 @@ path:=stringreplace(path,'\','/',[rfReplaceAll, rfIgnoreCase]);
   if stat.nfs_nlink=1
     then  HandleFileInformation.dwFileAttributes := FILE_ATTRIBUTE_NORMAL
     else HandleFileInformation.dwFileAttributes :=FILE_ATTRIBUTE_DIRECTORY;
+  //writeln('dwFileAttributes:'+inttostr(HandleFileInformation.dwFileAttributes));
   DateTimeToSystemTime(UNIXTimeToDateTimeFAST(stat.nfs_ctime),systime_);
   SystemTimeToFileTime(systime_ ,filetime_);
   HandleFileInformation.ftCreationTime :=filetime_ ;

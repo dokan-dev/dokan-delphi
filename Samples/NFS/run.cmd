@@ -1,1 +1,1 @@
-NFS_DOKAN.exe /r "nfs://192.168.1.248/volume2/public/" /l x
+NFS_DOKAN.exe /r "nfs://192.168.1.248/volume2/public/?uid=0&gid=0" /l x /s /d

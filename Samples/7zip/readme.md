@@ -15,4 +15,6 @@ directory listing, directory browsing, read file, copy/paste file, execute a bin
 
 Only read operations are supported for now.
 
+![Screenshot](screenshot.png)
+
 

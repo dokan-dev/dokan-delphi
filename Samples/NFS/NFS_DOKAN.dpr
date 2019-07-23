@@ -775,9 +775,9 @@ end;
 function onUnmounted(var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 begin
   DbgPrint('Unmounted\n');
-  Result := STATUS_SUCCESS;
+  //Result := STATUS_SUCCESS;
   //
- _nfsUnmount;
+  Result :=_unMount;
 end;
 
 function CtrlHandler(dwCtrlType: DWORD): BOOL; stdcall;
@@ -840,7 +840,7 @@ if pos('/discover',lowercase(cmdline))>0 then
 
     servers:=tstringlist.create;
     try
-    if _nfsdiscover(servers )=false then exit;
+    if _Discover(servers )=false then exit;
     for i:=0 to servers.Count -1 do writeln(servers[i]);
     except
     on e:exception do writeln(e.message);
@@ -1038,7 +1038,7 @@ if pos('/discover',lowercase(cmdline))>0 then
 
   //fillchar(RootDirectory,sizeof(RootDirectory ),0);
 
-  _nfsmount(WideCharToString(RootDirectory) );
+  _Mount(WideCharToString(RootDirectory) );
 
   status := DokanMain(dokanOptions^, dokanOperations^);
   case (status) of

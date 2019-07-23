@@ -11,6 +11,11 @@ function _FindFiles(FileName: LPCWSTR;
                 FillFindData: TDokanFillFindData; // function pointer
                 var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
+function _ReadFile(FileName: LPCWSTR; var Buffer;
+                        BufferLength: DWORD;
+                        var ReadLength: DWORD;
+                        Offset: LONGLONG;
+                        var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
 function _GetFileInformation(
     FileName: LPCWSTR; var HandleFileInformation: BY_HANDLE_FILE_INFORMATION;
@@ -26,14 +31,9 @@ function _WriteFile(FileName: LPCWSTR; const Buffer;
                          var NumberOfBytesWritten: DWORD;
                          Offset: LONGLONG;
                          var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
-function _ReadFile(FileName: LPCWSTR; var Buffer;
-                        BufferLength: DWORD;
-                        var ReadLength: DWORD;
-                        Offset: LONGLONG;
-                        var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
-function _Mount(filename:string):boolean; stdcall;
-function _unMount:NTSTATUS; stdcall;
+function _mount(filename:string):boolean;stdcall;
+function _unmount:NTSTATUS;stdcall;
 
 implementation
 
@@ -385,17 +385,17 @@ DokanMapKernelToUserCreateFileFlags(
 
 end;
 
-function _unMount:NTSTATUS; stdcall;
+function _unmount:NTSTATUS;stdcall;
 begin
-result:=STATUS_UNSUCCESSFUL;
+result:=EXIT_FAILURE;
 try
 arch.Close ;
-result:=STATUS_SUCCESS;
+result:=EXIT_SUCCESS;
 except
 end; //temp hack to avoid badvarianttype error...
 end;
 
-function _Mount(filename:string):boolean; stdcall;
+function _mount(filename:string):boolean;stdcall;
 var
 ext:string;
 begin

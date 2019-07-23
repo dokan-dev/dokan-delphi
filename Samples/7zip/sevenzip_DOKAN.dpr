@@ -414,8 +414,8 @@ var
 begin
   DbgPrint('WriteFile : %s, offset %d, length %d\n', [FileName, Offset,
            NumberOfBytesToWrite]);
-  Result := STATUS_SUCCESS;
-  //result:=_WriteFile(FileName,Buffer,NumberOfBytesToWrite,NumberOfBytesWritten,Offset,DokanFileInfo);
+  
+  result:=_WriteFile(FileName,Buffer,NumberOfBytesToWrite,NumberOfBytesWritten,Offset,DokanFileInfo);
 
 end;
 
@@ -743,8 +743,8 @@ end;
 function onUnmounted(var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 begin
   DbgPrint('Unmounted\n');
-  _close;
-  Result := STATUS_SUCCESS;
+  //Result := STATUS_SUCCESS;
+    Result:=_unmount;
   //
   //free filesystem
 end;
@@ -993,7 +993,7 @@ begin
 
   //_nfsmount(WideCharToString(RootDirectory) );
   //create filesyste ressources
-  if u7zip._open(WideCharToString(RootDirectory))=false then
+  if u7zip._mount(WideCharToString(RootDirectory))=false then
     begin
     Dispose(dokanOptions);
     Dispose(dokanOperations);

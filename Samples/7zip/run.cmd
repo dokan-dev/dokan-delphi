@@ -1,1 +1,1 @@
-sevenzip_DOKAN.exe /r test.zip /l x /w
+sevenzip_DOKAN.exe /r test.zip /l x

@@ -46,9 +46,9 @@ function _CreateFile(FileName: LPCWSTR; var SecurityContext: DOKAN_IO_SECURITY_C
                  ShareAccess: ULONG; CreateDisposition: ULONG;
                  CreateOptions: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;                        
 
-function _nfsMount(mount:string):boolean;
-function _nfsUnmount: boolean;
-function _nfsdiscover(items:tstrings):boolean;
+function _Mount(mount:string):boolean;stdcall
+function _unMount: ntstatus;stdcall
+function _Discover(items:tstrings):boolean;stdcall;
 
 implementation
 
@@ -531,7 +531,7 @@ end;
 
 
 
-function _nfsmount(mount:string):boolean;
+function _Mount(mount:string):boolean;stdcall
 var
   url: pnfs_url;
 begin
@@ -569,14 +569,14 @@ nfs_destroy_url(url);
   Result := true;
 end;
 
-function _nfsUnmount: boolean;
+function _unMount: ntstatus;stdcall
 begin
   if nfs<>nil then nfs_destroy_context(nfs);
   lib_free;
-  result:=true
+  result:=STATUS_SUCCESS;
 end;
 
-function _nfsdiscover(items:tstrings):boolean;
+function _discover(items:tstrings):boolean;stdcall;
 begin
 result:=nfsdiscover(items); 
 end;

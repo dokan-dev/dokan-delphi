@@ -29,7 +29,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 *)
 
-program NFS_DOKAN;
+program mount;
 
 {
 dir listing OK
@@ -55,11 +55,12 @@ delete dir ok
 
 uses
   Windows,
-  SysUtils,classes,
+  SysUtils,
+  classes,
   Math,
   Dokan in '..\..\Dokan.pas',
-  DokanWin in '..\..\DokanWin.pas',
-  unfs in 'unfs.pas';
+  DokanWin in '..\..\DokanWin.pas';
+
 
 const
 
@@ -193,6 +194,24 @@ var
   g_DebugMode: Boolean;
   g_HasSeSecurityPrivilege: Boolean;
   g_ImpersonateCallerUser: Boolean;
+  //
+  RootDirectory: WCHAR_PATH;
+  MountPoint: WCHAR_PATH;
+  UNCName: WCHAR_PATH;
+  Proxy: WCHAR_PATH;
+  fLibHandle:thandle=thandle(-1);
+  _createfile:TDokanZwCreateFile=nil;
+  _readfile:TDokanReadFile=nil;
+  _writefile:TDokanWriteFile=nil;
+  _GetFileInformation:TDokanGetFileInformation=nil;
+  _FindFiles:TDokanFindFiles=nil;
+  _Cleanup:TDokanCleanup;
+  _CloseFile:TDokanCloseFile;
+  _MoveFile:TDokanMoveFile=nil;
+  _DeleteFile:TDokanDeleteFile=nil;
+  _DeleteDirectory:TDokanDeleteDirectory=nil;
+  _unmount:function():NTSTATUS ; stdcall=nil;
+  _mount:function(param:string):boolean;stdcall=nil;
 
 procedure DbgPrint(format: string; const args: array of const); overload;
 var
@@ -212,11 +231,6 @@ procedure DbgPrint(fmt: string); overload;
 begin
   DbgPrint(fmt, []);
 end;
-
-var
-  RootDirectory: WCHAR_PATH;
-  MountPoint: WCHAR_PATH;
-  UNCName: WCHAR_PATH;
 
   {
 procedure GetFilePath(filePath: PWCHAR; numberOfElements: ULONG;
@@ -360,6 +374,7 @@ dummy:string;
 begin
 //
 DbgPrint('CreateFile:'+FileName);
+if assigned(_CreateFile) then
 result:=_CreateFile(FileName,  SecurityContext,DesiredAccess, FileAttributes,
                  ShareAccess, CreateDisposition, CreateOptions,  DokanFileInfo);
 end;
@@ -369,7 +384,7 @@ procedure onCloseFile(FileName: LPCWSTR;
 begin
 
 DbgPrint('CloseFile:'+FileName);
-_CloseFile(FileName ,DokanFileInfo );
+//_CloseFile(FileName ,DokanFileInfo );
 end;
 
 procedure onCleanup(FileName: LPCWSTR;
@@ -380,7 +395,7 @@ begin
 //
 DbgPrint('Cleanup: '+FileName);
 
-_Cleanup(FileName,DokanFileInfo);
+//_Cleanup(FileName,DokanFileInfo);
 
 end;
 
@@ -394,10 +409,11 @@ var
 
 begin
 //
-DbgPrint('ReadFile:'+FileName+' '+inttostr(BufferLength)+'@'+inttostr(offset));
+DbgPrint('ReadFile:'+FileName+' '+inttostr(BufferLength)+'@'+inttostr(offset)+ ' '+inttostr(DokanFileInfo.Context ));
 //
-
-result:=_ReadFile(filename,Buffer,BufferLength,ReadLength,Offset,DokanFileInfo);
+//Result := STATUS_SUCCESS;
+if assigned(_readfile) then
+  result:=_ReadFile(filename,Buffer,BufferLength,ReadLength,Offset,DokanFileInfo);
   
 end;
 
@@ -411,7 +427,8 @@ var
 begin
   DbgPrint('WriteFile : %s, offset %d, length %d\n', [FileName, Offset,
            NumberOfBytesToWrite]);
-   result:=_WriteFile(FileName,Buffer,NumberOfBytesToWrite,NumberOfBytesWritten,Offset,DokanFileInfo);
+if assigned(_WriteFile) then
+  result:=_WriteFile(FileName,Buffer,NumberOfBytesToWrite,NumberOfBytesWritten,Offset,DokanFileInfo);
 
 end;
 
@@ -440,6 +457,8 @@ begin
 //
 DbgPrint('GetFileInformation:'+FileName);
 //
+//Result := STATUS_SUCCESS;
+if assigned(_GetFileInformation) then
 result:=_GetFileInformation(FileName ,HandleFileInformation,DokanFileInfo);
 end;
 
@@ -464,9 +483,10 @@ begin
 DbgPrint('FindFiles:'+FileName);
 //
 try
-result:=_FindFiles(FileName,FillFindData,DokanFileInfo);
+if assigned(_FindFiles) then
+  result:=_FindFiles(FileName,FillFindData,DokanFileInfo);
 except
-on e:exception do DbgPrint('_FindFiles:'+e.message);
+on e:exception do writeln('_FindFiles:'+e.message);
 end;
 
 end;
@@ -533,7 +553,8 @@ var
 begin
 DbgPrint('MoveFile %s -> %s\n\n', [FileName, NewFileName]);
 //
-result:=_MoveFile(FileName,NewFileName,ReplaceIfExisting,DokanFileInfo);
+result := STATUS_SUCCESS;
+//result:=_MoveFile(FileName,NewFileName,ReplaceIfExisting,DokanFileInfo);
 
 end;
 
@@ -654,60 +675,22 @@ function onGetVolumeInformation(
     var MaximumComponentLength: DWORD; var FileSystemFlags: DWORD;
     FileSystemNameBuffer: LPWSTR; FileSystemNameSize: DWORD;
     var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
-var
-  volumeRoot: array [0 .. 3] of WCHAR;
-  fsFlags: DWORD;
 begin
-  fsFlags := 0;
+//fake it baby ...
 
-  lstrcpynW(VolumeNameBuffer, 'DOKAN', VolumeNameSize);
-  if (@VolumeSerialNumber <> nil) then
-    VolumeSerialNumber := $19831116;
-  if (@MaximumComponentLength <> nil) then
-    MaximumComponentLength := 255;
-  if (@FileSystemFlags <> nil) then
+ lstrcpynW(VolumeNameBuffer, 'DOKAN', VolumeNameSize);
+ if (@VolumeSerialNumber <> nil) then VolumeSerialNumber := $19831116;
+ if (@MaximumComponentLength <> nil) then MaximumComponentLength := 255;
+ if (@FileSystemFlags <> nil) then
     FileSystemFlags := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES or
                      FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
                      FILE_PERSISTENT_ACLS or FILE_NAMED_STREAMS;
+ lstrcpynW(FileSystemNameBuffer, 'NTFS', FileSystemNameSize);
 
-  volumeRoot[0] := RootDirectory[0];
-  volumeRoot[1] := ':';
-  volumeRoot[2] := '\';
-  volumeRoot[3] := #0;
+  Result := STATUS_SUCCESS;
+  Exit;
 
-  if (GetVolumeInformationW(@volumeRoot[0], nil, 0, nil, MaximumComponentLength,
-                           fsFlags, FileSystemNameBuffer,
-                           FileSystemNameSize)) then begin
 
-    if (@FileSystemFlags <> nil) then
-      FileSystemFlags := FileSystemFlags and fsFlags;
-
-    if (@MaximumComponentLength <> nil) then begin
-      DbgPrint('GetVolumeInformation: max component length %u\n',
-               [MaximumComponentLength]);
-    end;
-    if (@FileSystemNameBuffer <> nil) then begin
-      DbgPrint('GetVolumeInformation: file system name %s\n',
-               [FileSystemNameBuffer]);
-    end;
-    if (@FileSystemFlags <> nil) then begin
-      DbgPrint('GetVolumeInformation: got file system flags 0x%08x,' +
-               ' returning 0x%08x\n',
-               [fsFlags, FileSystemFlags]);
-    end;
-  end else begin
-
-    DbgPrint('GetVolumeInformation: unable to query underlying fs,' +
-             ' using defaults.  Last error = %u\n',
-             [GetLastError()]);
-
-    // File system name could be anything up to 10 characters.
-    // But Windows check few feature availability based on file system name.
-    // For this, it is recommended to set NTFS or FAT here.
-    lstrcpynW(FileSystemNameBuffer, 'NTFS', FileSystemNameSize);
-  end;
-
-  Result := STATUS_SUCCESS; Exit;
 end;
 
 (*
@@ -776,8 +759,11 @@ function onUnmounted(var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 begin
   DbgPrint('Unmounted\n');
   //Result := STATUS_SUCCESS;
+  if assigned(_unmount) then
+    result:=_unmount();
   //
-  Result :=_unMount;
+  FreeLibrary(fLibHandle);
+  //free filesystem
 end;
 
 function CtrlHandler(dwCtrlType: DWORD): BOOL; stdcall;
@@ -833,21 +819,7 @@ var
   servers:tstrings;
   i:byte;
 begin
-//
 
-if pos('/discover',lowercase(cmdline))>0 then
-  begin
-
-    servers:=tstringlist.create;
-    try
-    if _Discover(servers )=false then exit;
-    for i:=0 to servers.Count -1 do writeln(servers[i]);
-    except
-    on e:exception do writeln(e.message);
-    end;
-    servers.Free;
-    exit;
-  end;
 
 //
   New(dokanOperations);
@@ -877,6 +849,11 @@ if pos('/discover',lowercase(cmdline))>0 then
   command := 1;
   while (command < argc) do begin
     case (UpCase(argv[command][2])) of
+      'X': begin
+        Inc(command);
+        lstrcpynW(proxy, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
+        DbgPrint('proxy: %s\n', [proxy]);
+      end;
       'R': begin
         Inc(command);
         lstrcpynW(RootDirectory, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
@@ -1009,6 +986,50 @@ if pos('/discover',lowercase(cmdline))>0 then
 
   dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_ALT_STREAM;
 
+  if proxy<>'' then
+    begin
+    writeln('checking proxy; in progress');
+    fLibHandle:=thandle(-1);
+    fLibHandle:=LoadLibraryw(proxy);
+    if fLibHandle <=0 then
+      begin
+      writeln('LoadLibrary failed');
+      exit;
+      end;
+    //getprocadress is f...ing CASE SENSITIVE !!!!!!
+    @_createfile:=GetProcAddress(fLibHandle,'_CreateFile');
+    if not assigned(_createfile) then writeln('_createfile not ok');
+    @_readfile:=GetProcAddress(fLibHandle,'_ReadFile');
+    if not assigned(_readfile) then writeln('_readfile not ok');
+    @_writefile:=GetProcAddress(fLibHandle,'_WriteFile');
+    if not assigned(_writefile) then writeln('_writefile not ok');
+    @_findfiles:=GetProcAddress(fLibHandle,'_FindFiles');
+    if not assigned(_findfiles) then writeln('_findfiles not ok');
+    @_GetFileInformation:=GetProcAddress(fLibHandle,'_GetFileInformation');
+    if not assigned(_GetFileInformation) then writeln('_GetFileInformation not ok');
+    @_unmount:=GetProcAddress(fLibHandle,'_unMount');
+    if not assigned(_unmount) then writeln('_mount not ok');
+    @_mount:=GetProcAddress(fLibHandle,'_Mount');
+    if not assigned(_mount) then writeln('_mount not ok');
+    @_Cleanup:=GetProcAddress(fLibHandle,'_Cleanup');
+    if not assigned(_Cleanup) then writeln('_Cleanup not ok');
+    @_CloseFile:=GetProcAddress(fLibHandle,'_CloseFile');
+    if not assigned(_CloseFile) then writeln('_CloseFile not ok');
+    @_MoveFile:=GetProcAddress(fLibHandle,'_MoveFile');
+    if not assigned(_MoveFile) then writeln('_MoveFile not ok');
+    @_DeleteFile:=GetProcAddress(fLibHandle,'_DeleteFile');
+    if not assigned(_DeleteFile) then writeln('_DeleteFile not ok');
+    @_DeleteDirectory:=GetProcAddress(fLibHandle,'_DeleteDirectory');
+    if not assigned(_DeleteDirectory) then writeln('_DeleteDirectory not ok');
+    writeln('checking proxy: done');
+    end
+    else
+    begin
+    Dispose(dokanOptions);
+    writeln('no proxy defined.');
+    exit;
+    end;
+
   ZeroMemory(dokanOperations, SizeOf(DOKAN_OPERATIONS));
   dokanOperations^.ZwCreateFile := onCreateFile;
   dokanOperations^.Cleanup := onCleanup;
@@ -1036,9 +1057,15 @@ if pos('/discover',lowercase(cmdline))>0 then
   //dokanOperations^.FindStreams := onFindStreams;
   dokanOperations^.Mounted := onMounted;
 
-  //fillchar(RootDirectory,sizeof(RootDirectory ),0);
-
-  _Mount(WideCharToString(RootDirectory) );
+  //_nfsmount(WideCharToString(RootDirectory) );
+  //create filesyste ressources
+  if _mount(WideCharToString(RootDirectory))=false then
+    begin
+    Dispose(dokanOptions);
+    Dispose(dokanOperations);
+    Result := EXIT_FAILURE ;
+    Exit;
+    end;
 
   status := DokanMain(dokanOptions^, dokanOperations^);
   case (status) of
@@ -1073,6 +1100,20 @@ var
   argv: array of string;
 
 begin
+{
+writeln(extractfilepath('\folder'));
+writeln(extractfiledir('\folder'));
+writeln(extractfilepath('\folder\filename'));
+writeln(extractfiledir('\folder\filename'));
+writeln(extractfilename('\folder\filename'));
+}
+{
+writeln(extractfilepath('\'));
+writeln(extractfiledir('\'));
+writeln(extractfilepath('\filename'));
+writeln(extractfiledir('\filename'));
+writeln(extractfilename('\filename'));
+}
   IsMultiThread := True;
 
   lstrcpyW(RootDirectory, 'nfs://192.168.1.248/volume2/public/');
@@ -1090,3 +1131,4 @@ begin
     ExitCode := EXIT_FAILURE;
   end;
 end.
+

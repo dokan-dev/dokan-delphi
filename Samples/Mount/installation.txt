@@ -1,0 +1,11 @@
+
+1/The preferred/recommended way.
+Use the dokanx86.msi install from here https://github.com/dokan-dev/dokany/releases
+
+2/The manual way : alternative #1.
+You have the VC2017 already installed on your system (aka vcruntime140.dll)?
+Unzip the dynamic dokan libraries to your dokan_nfs folder : manual_install_x86_MD.zip.
+
+2/The manual way : alternative #2.
+You dont have the VC2017 already installed on your system (aka vcruntime140.dll)?
+Unzip the static dokan libraries to your dokan_nfs folder : manual_install_x86_MT.zip.

@@ -1,3 +1,5 @@
+Before reading, this example is superseded by https://github.com/erwan2212/dokan-delphi/edit/master/Samples/Mount.
+
 Mount a windows logical drive against a NFS export using :<br/>
 Dokan (https://github.com/dokan-dev/dokany) <br/>
 Libnfs (https://github.com/sahlberg/libnfs) <br/>

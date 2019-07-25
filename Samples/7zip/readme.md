@@ -1,3 +1,5 @@
+Before reading, this example is superseded by https://github.com/erwan2212/dokan-delphi/edit/master/Samples/Mount.
+
 Mount a windows logical drive against an archive supported by 7zip using :<br/>
 Dokan (https://github.com/dokan-dev/dokany) <br/>
 7zip (https://www.7-zip.org/) <br/>

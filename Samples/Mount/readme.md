@@ -1,19 +1,18 @@
-Mount a windows logical drive against an archive supported by 7zip using :<br/>
+Create your own filesystem and mount it as either a logical drive or folder.
 Dokan (https://github.com/dokan-dev/dokany) <br/>
-7zip (https://www.7-zip.org/) <br/>
+
 
 Dokan is built against VC 2017 (you need the VC2017 runtime - see installation.txt).<br/>
-7z library is provided here.<br/>
-
-sevenzip_dokan run without arguments will give the possible options.<br/>
 
 Below a simple command line to mount a nfs export on X:<br/>
-NFS_DOKAN.exe /r test.zip /l x<br/>
+mount.exe /r test.zip /l x /x proxy_nfs.dll <br/>
 
-The below file system operations have been tested successfully :<br/>
-directory listing, directory browsing, read file, copy/paste file, execute a binary.
+Mount.exe is a generic code/binary independant of the filesystem you wish to create. <br/>
+The filesystem is implemented in a proxy/dll. <br/>
+Previous examples (https://github.com/erwan2212/dokan-delphi/tree/master/Samples/7zip and https://github.com/erwan2212/dokan-delphi/tree/master/Samples/7zip) are now obsolete and superseded by this new "generic dokan mount" example.
 
-Only read operations are supported for now.
+7zip proxy example is here : https://github.com/erwan2212/dokan-delphi/tree/master/Samples/Proxy_7zip .
+NFS proxy example is here : https://github.com/erwan2212/dokan-delphi/tree/master/Samples/Proxy_NFS
 
 ![Screenshot](screenshot.png)
 

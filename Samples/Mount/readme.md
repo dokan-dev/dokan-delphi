@@ -4,8 +4,8 @@ Dokan (https://github.com/dokan-dev/dokany) <br/>
 
 Dokan is built against VC 2017 (you need the VC2017 runtime - see installation.txt).<br/>
 
-Below a simple command line to mount a nfs export on X:<br/>
-mount.exe /r test.zip /l x /x proxy_nfs.dll <br/>
+Below a simple command line to mount a zip archive on X:<br/>
+mount.exe /r test.zip /l x /x proxy_7zip.dll <br/>
 
 Mount.exe is a generic code/binary independant of the filesystem you wish to create. <br/>
 The filesystem is implemented in a proxy/dll. <br/>

@@ -2,3 +2,8 @@
 *.~*
 *.exe
 *.dll
+*.a
+*.o
+*.bak
+*.compiled
+*.ppu

@@ -1059,13 +1059,16 @@ begin
   dokanOperations^.Mounted := onMounted;
 
   //create filesyste ressources
+  write('Mounting...');
   if _mount(WideCharToString(RootDirectory))=false then
     begin
     Dispose(dokanOptions);
     Dispose(dokanOperations);
     Result := EXIT_FAILURE ;
+    writeln('failed.');
     Exit;
-    end;
+    end
+    else writeln('done.');
 
   status := DokanMain(dokanOptions^, dokanOperations^);
   case (status) of

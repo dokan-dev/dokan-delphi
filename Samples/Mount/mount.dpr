@@ -459,7 +459,7 @@ DbgPrint('GetFileInformation:'+FileName);
 //
 //Result := STATUS_SUCCESS;
 if assigned(_GetFileInformation) then
-result:=_GetFileInformation(FileName ,HandleFileInformation,DokanFileInfo);
+   result:=_GetFileInformation(FileName ,HandleFileInformation,DokanFileInfo);
 end;
 
 
@@ -650,8 +650,11 @@ var
   error: DWORD;
   securityDescriptorLength: DWORD;
 begin
-//
+//absolutely needed on win10?
+//will get "msdos fonction not valid" if not returning success
 DbgPrint('onGetFileSecurity:'+FileName);
+SecurityInformation := SecurityInformation and not SACL_SECURITY_INFORMATION;
+SecurityInformation := SecurityInformation and not BACKUP_SECURITY_INFORMATION;
 Result := STATUS_SUCCESS;
 end;
 
@@ -760,7 +763,11 @@ begin
   DbgPrint('Unmounted\n');
   //Result := STATUS_SUCCESS;
   if assigned(_unmount) then
+    begin
+    write('Unmounting...');
     result:=_unmount();
+    if result=status_success then write('Done.') else writeln('Failed.');
+    end;
   //
   FreeLibrary(fLibHandle);
   //free filesystem
@@ -1050,7 +1057,7 @@ begin
   //dokanOperations^.SetAllocationSize := onSetAllocationSize;
   dokanOperations^.LockFile := onLockFile;  //only return success
   dokanOperations^.UnlockFile := onUnlockFile; //only return success
-  //dokanOperations^.GetFileSecurity := onGetFileSecurity;
+  dokanOperations^.GetFileSecurity := onGetFileSecurity;
   //dokanOperations^.SetFileSecurity := onSetFileSecurity;
   dokanOperations^.GetDiskFreeSpace := nil; // onDokanGetDiskFreeSpace;
   dokanOperations^.GetVolumeInformation := onGetVolumeInformation;

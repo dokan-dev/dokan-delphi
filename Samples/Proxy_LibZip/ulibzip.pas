@@ -2,8 +2,10 @@ unit ulibzip;
 
 interface
 
-uses  windows,classes,sysutils,
-      Dokan,DokanWin,
+uses  windows,classes,sysutils,strutils,
+      Dokan in '..\..\Dokan.pas',
+      DokanWin in '..\..\DokanWin.pas',
+      dateutils,
       libzip ;
 
 
@@ -50,6 +52,31 @@ begin
 //dummy
 end;
 
+function Occurrences(const Substring, Text: string): integer;
+var
+  offset: integer;
+begin
+  result := 0;
+  offset := PosEx(Substring, Text, 1);
+  while offset <> 0 do
+  begin
+    inc(result);
+    offset := PosEx(Substring, Text, offset + length(Substring));
+  end;
+end;
+
+function DateTimeToFileTime(DateTime: TDateTime): TFileTime;
+const
+  FileTimeBase      = -109205.0;
+  FileTimeStep: Extended = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0 * 10.0; // 100 nSek per Day
+var
+  E: Extended;
+  F64: Int64;
+begin
+  E := (DateTime - FileTimeBase) * FileTimeStep;
+  F64 := Round(E);
+  Result := TFileTime(F64);
+end;
 
 {
 
@@ -87,36 +114,38 @@ writeln('findfiles: full path '+FileName);
    //SetProgressCallback(nil, ProgressCallback); //optional
    for i := 0 to num - 1 do
    begin
-   zip_stat_index(arch,i,0,@stat);
+   if zip_stat_index(arch,i,0,@stat)=0 then
+   begin
 
 
     //if string(filename)='\' then
     if 1=1 then
     begin
     //if {(pos('\',Itempath[i])=0) and} (filename=extractfiledir('\'+stat.name )) then
+    if Occurrences('/',stat.name)<=1 then
       begin
       FillChar (findData ,sizeof(findData ),0);
       //
-      if stat.comp_size <>0
+      if stat.size >0
             then findData.dwFileAttributes := FILE_ATTRIBUTE_NORMAL
             else findData.dwFileAttributes := FILE_ATTRIBUTE_DIRECTORY;
       //
       widetemp:=stat.name ; //extractfilename(Itempath[i]);
       Move(widetemp[1],  findData.cFileName,Length(widetemp)*Sizeof(Widechar));
       //
-        findData.nFileSizeHigh :=LARGE_INTEGER(stat.comp_size).HighPart;
-        findData.nFileSizeLow  :=LARGE_INTEGER(stat.comp_size).LowPart;
+        findData.nFileSizeHigh :=LARGE_INTEGER(stat.size).HighPart;
+        findData.nFileSizeLow  :=LARGE_INTEGER(stat.size).LowPart;
       //
 
-      findData.ftCreationTime:=stat.mtime;
-      findData.ftLastAccessTime:=stat.mtime;
-      findData.ftLastWriteTime   :=stat.mtime;
+      findData.ftCreationTime:=DateTimeToFileTime(dateutils.UnixToDateTime (int64(stat.mtime)));
+      findData.ftLastAccessTime:=DateTimeToFileTime(dateutils.UnixToDateTime (int64(stat.mtime)));
+      findData.ftLastWriteTime   :=DateTimeToFileTime(dateutils.UnixToDateTime (int64(stat.mtime)));
 
       //
       FillFindData(findData, DokanFileInfo);
       end;// if (pos('\',Itempath[i])=0) then
       end;//if string(filename)='\' then
-
+      end; //if zip_stat_index(arch,i,0,@stat)=0 then
       end;//for i := 0 to num - 1 do
 
  Result := STATUS_SUCCESS;
@@ -128,44 +157,41 @@ end;
 
 end;
 
-function filename_to_index(filename:string):integer;
-var
-i:integer;
-begin
-{
-result:=-1;
-//
-try
-for i := 0 to arch.NumberOfItems - 1 do
-begin
-if '\'+ arch.ItemPath [i]=filename then
-begin
-result:=i;
-break;
-end; //if arch.ItemPath [i]=filename then
-end; //for i := 0 to arch.NumberOfItems - 1 do
-except
-on e:exception do writeln(e.message);
-end;
-}
-end;
-
 function _ReadFile(FileName: LPCWSTR; var Buffer;
                         BufferLength: DWORD;
                         var ReadLength: DWORD;
                         Offset: LONGLONG;
                         var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
-stream:tmemorystream; //tstream does not have a seek function
 i:integer;
+dummy:pointer;
+file_:pointer=nil;
+path:string;
 begin
-if WideCharToString(filename)='\' then exit;
-writeln('_ReadFile:'+FileName+' '+inttostr(BufferLength)+'@'+inttostr(Offset));
+path := WideCharToString(filename);
+writeln('_ReadFile:'+path+' '+inttostr(BufferLength)+'@'+inttostr(Offset));
 //writeln(DokanFileInfo.context); //later ...
 if arch=nil then exit;
-i:=filename_to_index(filename);
+if path[1]='\' then system.delete(path,1,1);
+//i:=zip_name_locate(arch,pchar(path),0);
+i:=DokanFileInfo.context-1;
 if i=-1 then exit;
 try
+//
+file_:=zip_fopen_index(arch,i,0);
+if file_=nil then
+   begin
+   writeln('zip_fopen_index failed');
+   exit;
+   end;
+if offset<>0 then
+  begin
+  dummy:=allocmem(offset);
+  zip_fread (file_,dummy,offset);
+  freemem(dummy);
+  end;
+ReadLength:= dword(zip_fread (file_,@buffer,BufferLength));
+zip_fclose (file_);
 //
 Result := STATUS_SUCCESS;
 except
@@ -180,9 +206,26 @@ function _WriteFile(FileName: LPCWSTR; const Buffer;
                          Offset: LONGLONG;
                          var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
-  dummy:string;
+  path:string;
+  source:pointer=nil;
 begin
-  //writeln('WriteFile: '+ FileName+' '+inttostr(NumberOfBytesToWrite)+'@'+inttostr(Offset) );
+path := WideCharToString(filename);
+  writeln('_WriteFile: '+ path+' '+inttostr(NumberOfBytesToWrite)+'@'+inttostr(Offset) );
+  //
+  if arch<>nil
+        then source:=zip_source_buffer(arch,@buffer,NumberOfBytesToWrite ,-1);
+ //
+  //if DokanFileInfo.context<>0 then writeln(DokanFileInfo.context); //then replace...
+  if source<>nil then
+    begin
+    if zip_file_add (arch,pchar(ExtractFileName(path)),source,0)=-1
+       then writeln('zip_file_add failed');
+    //if zip_file_replace (arch,DokanFileInfo.context,source,ZIP_FL_OVERWRITE)=-1
+      //then writeln('zip_file_replace failed');
+    //if zip_file_add (arch,pzip_stat(sb)^.name,source,ZIP_FL_OVERWRITE)=-1 then showmessage('zip_file_replace failed');
+    //zip_source_free(source);
+    end
+    else writeln('source=nil');
   Result := STATUS_SUCCESS;
 
 end;
@@ -198,11 +241,12 @@ var
   systime_:systemtime;
   filetime_:filetime;
   i:integer;
+  stat:tzip_stat;
 
 begin
   result:=STATUS_NO_SUCH_FILE;
-//writeln('_GetFileInformation:'+FileName);
 path := WideCharToString(filename);
+writeln('_GetFileInformation:'+FileName+ ' '+inttostr(DokanFileInfo.context));
 
 //root folder need to a success result + directory attribute...
 if path='\' then
@@ -214,41 +258,35 @@ if path='\' then
 
 if arch=nil then exit;
 
-i:=filename_to_index(WideCharToString(filename));
+if path[1]='\' then system.delete(path,1,1);
+
+i:=DokanFileInfo.context-1;
+if i=-1 then i:=zip_name_locate(arch,pchar(path),0);
 if i=-1 then
   begin
-  writeln('_GetFileInformation:'+filename+ ' no such file');
+  writeln('_GetFileInformation:'+path+ ' no such file');
   exit;
   end;
 
 
 try
-{
+fillchar(stat,sizeof(stat),0);
+if zip_stat_index(arch,i,0,@stat)=-1 then exit;
+
       fillchar(HandleFileInformation,sizeof(HandleFileInformation),0);
       //
-      if not arch.ItemIsFolder[i]
+      if stat.size>0
             then HandleFileInformation.dwFileAttributes := FILE_ATTRIBUTE_NORMAL
             else HandleFileInformation.dwFileAttributes := FILE_ATTRIBUTE_DIRECTORY;
       //
-      arch.inArchive.GetProperty(i,kpidSize,v);
-      if vartype(v)=21 then
-        begin
-        HandleFileInformation.nFileSizeHigh :=LARGE_INTEGER(VarToInt64(v)).HighPart;
-        HandleFileInformation.nFileSizeLow  :=LARGE_INTEGER(VarToInt64(v)).LowPart;
-        end;//if vartype(v)=21 then
-      //writeln('kpidSize:'+inttostr(VarToInt64(v) ));
+      HandleFileInformation.nFileSizeHigh :=LARGE_INTEGER(stat.size ).HighPart;
+      HandleFileInformation.nFileSizeLow  :=LARGE_INTEGER(stat.size).LowPart;
       //
+      HandleFileInformation.ftCreationTime:=DateTimeToFileTime(dateutils.UnixToDateTime (int64(stat.mtime)));
+      HandleFileInformation.ftLastAccessTime:=DateTimeToFileTime(dateutils.UnixToDateTime (int64(stat.mtime)));
+      HandleFileInformation.ftLastWriteTime   :=DateTimeToFileTime(dateutils.UnixToDateTime (int64(stat.mtime)));
 
-      arch.inArchive.GetProperty(i,kpidCreationTime,olevariant(pv));
-      HandleFileInformation.ftCreationTime:=pv.filetime;
-      //if vartype(v)=64 then  findData.ftCreationTime :=_filetime(TvarData( V ).VInt64 ); //WriteFiletime(TvarData( V ).VInt64);
-      arch.inArchive.GetProperty(i,kpidLastAccessTime,olevariant(pv));
-      HandleFileInformation.ftLastAccessTime:=pv.filetime;
-      //if vartype(v)=64 then  findData.ftLastAccessTime  :=_filetime(TvarData( V ).VInt64); //WriteFiletime(TvarData( V ).VInt64);
-      arch.inArchive.GetProperty(i,kpidLastWriteTime,olevariant(pv));
-      HandleFileInformation.ftLastWriteTime   :=pv.filetime;
-      //if vartype(v)=64 then  findData.ftLastWriteTime   :=_filetime(TvarData( V ).VInt64); //WriteFiletime(TvarData( V ).VInt64);
-}
+      //
   Result := STATUS_SUCCESS;
   except
   on e:exception do writeln(e.message);
@@ -266,21 +304,31 @@ var
   genericDesiredAccess: ACCESS_MASK;
 path:string;
 i:integer;
+stat:tzip_stat;
 begin
 Result := STATUS_SUCCESS;
 path := WideCharToString(filename);
-//writeln('CreateFile:'+path);
-if path='\' then exit;
+writeln('_CreateFile:'+path);
+
+if path='\' then
+  begin
+  DokanFileInfo.IsDirectory:=true;
+  exit;
+  end;
+
 if arch=nil then exit;
 
+//manage creationdisposition
 DokanMapKernelToUserCreateFileFlags(
       DesiredAccess, FileAttributes, CreateOptions, CreateDisposition,
       @genericDesiredAccess, @fileAttributesAndFlags, @creationDisposition);
 
-i:=filename_to_index(path);
+if path[1]='\' then system.delete(path,1,1);
+i:=DokanFileInfo.context-1;
+if i=-1 then i:=zip_name_locate(arch,pchar(path),0);
 if i=-1 then
   begin
-  writeln('_CreateFile:'+filename+ ' no such file');
+  writeln('_CreateFile:'+path+ ' no such file');
   //this is needed so that files can execute
   if creationDisposition = CREATE_NEW
     then result := STATUS_SUCCESS
@@ -288,20 +336,18 @@ if i=-1 then
   exit;
   end;
 
+//zip_stat_index(arch,i,0,@stat);
+
 //we could re use it in the readfile
 //and eventually in the close if we want to keep stream opened
-{
-DokanFileInfo.Context :=i;
+DokanFileInfo.Context :=i+1;
+writeln('DokanFileInfo.Context:'+inttostr(i+1));
 
- if not arch.ItemIsFolder[i]
+ {
+ if stat.size >0
             then DokanFileInfo.IsDirectory := false
             else DokanFileInfo.IsDirectory := True;
-
-//manage creationdisposition
-
-DokanMapKernelToUserCreateFileFlags(
-      DesiredAccess, FileAttributes, CreateOptions, CreateDisposition,
-      @genericDesiredAccess, @fileAttributesAndFlags, @creationDisposition);
+ }
 
  if (creationDisposition = CREATE_NEW) then begin
     DbgPrint('\tCREATE_NEW\n');
@@ -316,17 +362,19 @@ DokanMapKernelToUserCreateFileFlags(
   end else begin
     DbgPrint('\tUNKNOWN creationDisposition!\n');
   end;
-}
+
 end;
 
 function _unMount:NTSTATUS; stdcall;
 begin
 result:=STATUS_UNSUCCESSFUL;
 try
-if zip_close (arch)=-1 then writeln('zip_close failed');
+if arch<>nil then
+   if zip_close (arch)=-1 then writeln('zip_close failed');
 result:=STATUS_SUCCESS;
 except
-end; //temp hack to avoid badvarianttype error...
+on e:exception do writeln('_unMount:'+e.message);
+end;
 end;
 
 function _Mount(filename:string):boolean; stdcall;
@@ -338,12 +386,16 @@ archive:=filename;
 init;
 //writeln(filename);
 //
+try
 arch:=zip_open(pchar(filename),0,@err);
 if arch=nil then
-  begin writeln(inttostr(err));exit;end;
+  begin writeln('_Mount:'+inttostr(err));exit;end;
   //else writeln('zip_open OK');
-//
-result:=true;
+  result:=true;
+except
+on e:exception do writeln('_unMount:'+e.message);
+end;
+
 end;
 
 end.

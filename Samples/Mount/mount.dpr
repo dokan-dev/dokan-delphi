@@ -384,7 +384,12 @@ procedure onCloseFile(FileName: LPCWSTR;
 begin
 
 DbgPrint('CloseFile:'+FileName);
-//_CloseFile(FileName ,DokanFileInfo );
+try
+if assigned (_CloseFile)
+   then _CloseFile(FileName ,DokanFileInfo );
+except
+on e:exception do writeln('_CloseFile:'+e.message);
+end;
 end;
 
 procedure onCleanup(FileName: LPCWSTR;
@@ -394,9 +399,12 @@ var
 begin
 //
 DbgPrint('Cleanup: '+FileName);
-
-//_Cleanup(FileName,DokanFileInfo);
-
+try
+if assigned(_Cleanup)
+   then _Cleanup(FileName,DokanFileInfo);
+except
+on e:exception do writeln('_Cleanup:'+e.message);
+end;
 end;
 
 function onReadFile(FileName: LPCWSTR; var Buffer;
@@ -462,11 +470,6 @@ if assigned(_GetFileInformation) then
    result:=_GetFileInformation(FileName ,HandleFileInformation,DokanFileInfo);
 end;
 
-
-
-
-
-
 function onFindFiles(FileName: LPCWSTR;
                 FillFindData: TDokanFillFindData; // function pointer
                 var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
@@ -512,9 +515,13 @@ var
 begin
 //
 DbgPrint('DeleteFile:'+FileName);
-result := STATUS_SUCCESS;
-exit;
-//
+//writeln('DeleteFile:'+FileName);
+try
+if assigned(_DeleteFile)
+   then result := _DeleteFile(filename,DokanFileInfo);
+except
+on e:exception do writeln('_DeleteFile:'+e.message);
+end;
 
 end;
 
@@ -533,7 +540,12 @@ var
 begin
 //
 DbgPrint('DeleteDirectory:'+FileName);
-result := STATUS_SUCCESS;
+try
+if assigned(_DeleteDirectory)
+   then result := _DeleteDirectory(FileName,DokanFileInfo);
+except
+on e:exception do writeln('_DeleteDirectory:'+e.message);
+end;
 
 end;
 
@@ -553,8 +565,12 @@ var
 begin
 DbgPrint('MoveFile %s -> %s\n\n', [FileName, NewFileName]);
 //
-result := STATUS_SUCCESS;
-//result:=_MoveFile(FileName,NewFileName,ReplaceIfExisting,DokanFileInfo);
+try
+if assigned(_MoveFile)
+   then result := _MoveFile(filename,newfilename,ReplaceIfExisting,DokanFileInfo);
+except
+on e:exception do writeln('_MoveFile:'+e.message);
+end;
 
 end;
 
@@ -812,9 +828,7 @@ begin
     '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
     'Examples:\n' +
     '\tprogram.exe /discover\n' +
-    '\tprogram.exe /r C:\\Users /l M:\t\t\t# Mirror C:\\Users as RootDirectory into a drive of letter M:\\.\n' +
-    '\tprogram.exe /r C:\\Users /l C:\\mount\\dokan\t# Mirror C:\\Users as RootDirectory into NTFS folder C:\\mount\\dokan.\n' +
-    '\tprogram.exe /r C:\\Users /l M: /n /u \\myfs\\myfs1\t# Mirror C:\\Users as RootDirectory into a network drive M:\\. with UNC \\\\myfs\\myfs1\n\n' +
+    '\tprogram.exe /r test.zip /l x /x proxy_7zip.dll\n' +
     'Unmount the drive with CTRL + C in the console or alternatively via ''dokanctl /u MountPoint''.\n'));
 end;
 

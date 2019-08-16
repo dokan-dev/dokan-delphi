@@ -34,6 +34,10 @@ function _ReadFile(FileName: LPCWSTR; var Buffer;
                         Offset: LONGLONG;
                         var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 
+procedure _Cleanup(FileName: LPCWSTR;var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
+function _DeleteFile(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+function _DeleteDirectory(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+
 function _Mount(filename:string):boolean; stdcall;
 function _unMount:NTSTATUS; stdcall;
 
@@ -103,7 +107,7 @@ temp:string;
 widetemp:widestring;
 
 begin
-writeln('findfiles: full path '+FileName);
+writeln('_FindFiles:'+FileName);
  try
  //the below should/could take place in the _open function
  if arch=nil then exit;
@@ -230,6 +234,51 @@ path := WideCharToString(filename);
 
 end;
 
+procedure _Cleanup(FileName: LPCWSTR;var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
+var path:string;
+begin
+path := WideCharToString(filename);
+writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
+  if DokanFileInfo.DeleteOnClose=true then
+    begin
+    //item is a file
+    if DokanFileInfo.IsDirectory =false
+      then
+         begin
+         if zip_delete (arch,DokanFileInfo.context )=-1
+           then writeln('zip_delete failed')
+           else writeln('file has been deleted');
+         end
+      else
+      //item is a directory
+      begin
+      end;
+
+    end;
+end;
+
+function _DeleteFile(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+  var path: string;
+
+begin
+  result:=STATUS_NO_SUCH_FILE;
+  path := WideCharToString(filename);
+  writeln('_DeleteFile:'+path+ ' '+inttostr(DokanFileInfo.context));
+  if DokanFileInfo.context>0 then
+    begin
+    //DokanFileInfo.DeleteOnClose :=true; //not necessary according to doc
+    Result := STATUS_SUCCESS; //this actully tells that deleteonclose should be set to true
+    end;
+end;
+
+function _DeleteDirectory(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+var path: string;
+begin
+result:=STATUS_NO_SUCH_FILE;
+path := WideCharToString(filename);
+writeln('_DeleteDirectory:'+path+ ' '+inttostr(DokanFileInfo.context));
+end;
+
 function _GetFileInformation(
     FileName: LPCWSTR; var HandleFileInformation: BY_HANDLE_FILE_INFORMATION;
     var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
@@ -246,7 +295,7 @@ var
 begin
   result:=STATUS_NO_SUCH_FILE;
 path := WideCharToString(filename);
-writeln('_GetFileInformation:'+FileName+ ' '+inttostr(DokanFileInfo.context));
+writeln('_GetFileInformation:'+path+ ' '+inttostr(DokanFileInfo.context));
 
 //root folder need to a success result + directory attribute...
 if path='\' then
@@ -348,7 +397,7 @@ writeln('DokanFileInfo.Context:'+inttostr(i+1));
             then DokanFileInfo.IsDirectory := false
             else DokanFileInfo.IsDirectory := True;
  }
-
+ //DbgPrint
  if (creationDisposition = CREATE_NEW) then begin
     DbgPrint('\tCREATE_NEW\n');
   end else if (creationDisposition = OPEN_ALWAYS) then begin

@@ -797,6 +797,19 @@ end;
 
 end;
 
+procedure _fseek(file_:pointer;offset:longlong);
+begin
+while offset>=0 do
+  begin
+  dummy:=allocmem(min(offset,1024));
+  zip_fread (file_,dummy,min(offset,1024));
+  writeln('read '+inttostr(offset));
+  freemem(dummy);
+  dec(offset,1024);
+  end;
+  ssss;
+end;
+
 function _ReadFile(FileName: LPCWSTR; var Buffer;
                         BufferLength: DWORD;
                         var ReadLength: DWORD;
@@ -827,12 +840,15 @@ if file_=nil then
    exit;
    end;
 //cheap way to implement seek - we small implement small chunks of buffer
-if offset<>0 then
+{
+if offset>0 then
   begin
   dummy:=allocmem(offset);
   zip_fread (file_,dummy,offset);
   freemem(dummy);
   end;
+}
+if offset>0 then _fseek(file_,offset);
 ReadLength:= dword(zip_fread (file_,@buffer,BufferLength));
 zip_fclose (file_);
 //

@@ -163,10 +163,7 @@ procedure init;
 
 var
 arch:pointer=nil;
-<<<<<<< HEAD
 zipfile:string='';
-=======
->>>>>>> cd585a6ef8a932abd02799303557ae1e7fea9e8e
 
 zip_open:function(path:pchar;flags:integer;errorp:pinteger):pointer;cdecl;
 zip_close:function(archive:pointer):integer;cdecl;

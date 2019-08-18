@@ -600,6 +600,7 @@ var
 begin
 //if you actually use this function you should do something about it...
 DbgPrint('SetEndOfFile %s, %d\n', [FileName, ByteOffset]);
+//writeln('SetEndOfFile:'+ FileName);
 Result := STATUS_SUCCESS;
 end;
 

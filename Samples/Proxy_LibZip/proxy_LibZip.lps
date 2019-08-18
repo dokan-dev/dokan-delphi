@@ -9,20 +9,22 @@
         <Filename Value="proxy_LibZip.dpr"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="proxy_7zip"/>
-        <EditorIndex Value="-1"/>
-        <CursorPos X="4" Y="28"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="14"/>
+        <CursorPos X="24" Y="23"/>
         <FoldState Value=" TL2085"/>
         <UsageCount Value="106"/>
+        <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit0>
       <Unit1>
         <Filename Value="ulibzip.pas"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="259"/>
-        <CursorPos Y="40"/>
+        <TopLine Value="226"/>
+        <CursorPos X="13" Y="239"/>
         <UsageCount Value="106"/>
+        <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit1>
       <Unit2>
@@ -65,7 +67,12 @@
         <UsageCount Value="5"/>
       </Unit6>
     </Units>
-    <JumpHistory HistoryIndex="-1"/>
+    <JumpHistory Count="1">
+      <Position1>
+        <Filename Value="ulibzip.pas"/>
+        <Caret Line="248" Column="58" TopLine="235"/>
+      </Position1>
+    </JumpHistory>
     <RunParams>
       <FormatVersion Value="2"/>
       <Modes Count="0" ActiveMode=""/>

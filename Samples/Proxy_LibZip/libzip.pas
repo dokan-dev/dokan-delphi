@@ -30,7 +30,7 @@ type tzip_stat =record
      index:int64;                 //* index within archive */
      size:int64;                  //* size of file (uncompressed) */
      comp_size:int64;             //* size of file (compressed) */
-     mtime:filetime;                       //* modification time */
+     mtime:int64; //filetime;                       //* modification time */
      crc:dword;                   //* crc of file data */
      comp_method:word;           //* compression method used */
      encryption_method:word;     //* encryption method used */
@@ -41,7 +41,7 @@ pzip_stat=^tzip_stat;
 procedure init;
 
 var
-arch:pointer;
+arch:pointer=nil;
 
 zip_open:function(path:pchar;flags:integer;errorp:pinteger):pointer;cdecl;
 zip_close:function(archive:pointer):integer;cdecl;
@@ -54,6 +54,8 @@ zip_rename:function(archive:pointer;index:int64;name:pchar):integer;cdecl;
 
 zip_source_buffer:function(archive:pointer;data:pointer;len:int64;freep:integer):pointer;cdecl;
 zip_source_free:procedure(source:pointer);cdecl;
+
+zip_source_file:function(archive:pointer; fname:pchar;  start:int64;len:int64):pointer;cdecl;
 
 zip_stat_index:function(archive:pointer; index:int64;flags:integer;sb:pointer):integer;cdecl;
 zip_get_num_entries:function(archive:pointer; flags:integer):int64;cdecl;
@@ -95,6 +97,7 @@ if lib=thandle(-1) then exit;
 
 @zip_source_buffer:=getprocaddress(lib,'zip_source_buffer');
 @zip_source_free:=getprocaddress(lib,'zip_source_free');
+@zip_source_file:=getprocaddress(lib,'zip_source_file');
 
 @zip_stat_index:= getprocaddress(lib,'zip_stat_index');
 @zip_get_num_entries:=getprocaddress(lib,'zip_get_num_entries');

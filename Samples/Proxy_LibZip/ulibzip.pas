@@ -236,16 +236,19 @@ end;
 
 procedure _Cleanup(FileName: LPCWSTR;var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
 var path:string;
+  i:integer;
 begin
 path := WideCharToString(filename);
 writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
+if arch=nil then exit;
+i:=DokanFileInfo.context-1;
   if DokanFileInfo.DeleteOnClose=true then
     begin
     //item is a file
     if DokanFileInfo.IsDirectory =false
       then
          begin
-         if zip_delete (arch,DokanFileInfo.context )=-1
+         if zip_delete (arch,int64(i) )=-1
            then writeln('zip_delete failed')
            else writeln('file has been deleted');
          end

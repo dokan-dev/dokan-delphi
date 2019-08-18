@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 unit ulibzip;
 
 interface

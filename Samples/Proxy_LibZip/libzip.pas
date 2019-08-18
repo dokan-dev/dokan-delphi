@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 //delphi unit for libzip
 
 

@@ -3,8 +3,8 @@ unit ulibzip;
 interface
 
 uses  windows,classes,sysutils,strutils,
-      Dokan in '..\..\Dokan.pas',
-      DokanWin in '..\..\DokanWin.pas',
+      Dokan ,
+      DokanWin ,
       dateutils,
       libzip ;
 
@@ -44,7 +44,7 @@ function _unMount:NTSTATUS; stdcall;
 implementation
 
 var
-archive:string;
+dw:dword;
 
 procedure DbgPrint(format: string; const args: array of const); overload;
 begin
@@ -54,6 +54,26 @@ end;
 procedure DbgPrint(fmt: string); overload;
 begin
 //dummy
+end;
+
+function GetTempDir: string;
+var
+  MyBuffer, MyFileName: array[0..MAX_PATH] of char;
+begin
+  FillChar(MyBuffer, MAX_PATH, 0);
+  GetTempPath(SizeOf(MyBuffer), MyBuffer);
+  Result := mybuffer;
+end;
+
+function GetTempFile(const APrefix: string): string;
+var
+  MyBuffer, MyFileName: array[0..MAX_PATH] of char;
+begin
+  FillChar(MyBuffer, MAX_PATH, 0);
+  FillChar(MyFileName, MAX_PATH, 0);
+  GetTempPath(SizeOf(MyBuffer), MyBuffer);
+  GetTempFileName(MyBuffer, pchar(APrefix), 0, MyFileName);
+  Result := MyFileName;
 end;
 
 function Occurrences(const Substring, Text: string): integer;
@@ -80,6 +100,20 @@ begin
   E := (DateTime - FileTimeBase) * FileTimeStep;
   F64 := Round(E);
   Result := TFileTime(F64);
+end;
+
+function _refresh:boolean;
+var err:integer;
+begin
+   result:=zip_close (arch)=-1;
+   err:=0;
+   arch:=zip_open(pchar(zipfile),0,@err);
+   if (arch=nil) or (err<>0) then
+    begin
+    writeln('zip_open failed:'+inttostr(err));
+    result:=false;
+    end
+    else result:=true;
 end;
 
 {
@@ -169,25 +203,28 @@ function _ReadFile(FileName: LPCWSTR; var Buffer;
 var
 i:integer;
 dummy:pointer;
-file_:pointer=nil;
+file_:pointer;
 path:string;
 begin
+
 path := WideCharToString(filename);
-writeln('_ReadFile:'+path+' '+inttostr(BufferLength)+'@'+inttostr(Offset));
-//writeln(DokanFileInfo.context); //later ...
 if arch=nil then exit;
+writeln('_ReadFile:'+path+' '+inttostr(BufferLength)+'@'+inttostr(Offset));
+
 if path[1]='\' then system.delete(path,1,1);
-//i:=zip_name_locate(arch,pchar(path),0);
 i:=DokanFileInfo.context-1;
+//if i=-1 then i:=zip_name_locate(arch,pchar(path),0);
 if i=-1 then exit;
 try
 //
+file_:=nil;
 file_:=zip_fopen_index(arch,i,0);
 if file_=nil then
    begin
    writeln('zip_fopen_index failed');
    exit;
    end;
+//cheap way to implement seek - we small implement small chunks of buffer
 if offset<>0 then
   begin
   dummy:=allocmem(offset);
@@ -210,31 +247,147 @@ function _WriteFile(FileName: LPCWSTR; const Buffer;
                          Offset: LONGLONG;
                          var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
-  path:string;
-  source:pointer=nil;
+  path,tempfile:string;
+  data,source,file_:pointer; //=nil; only if fpc...
+  stat:tzip_stat;
+  i:integer;
+  size:int64;
+  fs:TFileStream;
 begin
 path := WideCharToString(filename);
-  writeln('_WriteFile: '+ path+' '+inttostr(NumberOfBytesToWrite)+'@'+inttostr(Offset) );
+if arch=nil then exit;
+writeln('_WriteFile: '+ path+' '+inttostr(NumberOfBytesToWrite)+'@'+inttostr(Offset) );
+
+i:=DokanFileInfo.context-1;
+//if i=-1 then i:=zip_name_locate(arch,pchar(path),0);
+if i=-1 then
+  begin
+  writeln('file without a context');
+  //exit;
+  end;
+
+
+  
+  if offset=0 then
+  begin
+  source:=nil;
+  source:=zip_source_buffer(arch,@buffer,NumberOfBytesToWrite ,0);
   //
-  if arch<>nil
-        then source:=zip_source_buffer(arch,@buffer,NumberOfBytesToWrite ,-1);
- //
-  //if DokanFileInfo.context<>0 then writeln(DokanFileInfo.context); //then replace...
   if source<>nil then
     begin
     if zip_file_add (arch,pchar(ExtractFileName(path)),source,0)=-1
-       then writeln('zip_file_add failed');
-    //if zip_file_replace (arch,DokanFileInfo.context,source,ZIP_FL_OVERWRITE)=-1
-      //then writeln('zip_file_replace failed');
-    //if zip_file_add (arch,pzip_stat(sb)^.name,source,ZIP_FL_OVERWRITE)=-1 then showmessage('zip_file_replace failed');
-    //zip_source_free(source);
+       then writeln('zip_file_add failed')
+       else
+       begin
+       writeln('zip_file_add OK');
+       _refresh;
+       end;
+    //zip_source_free(source); //done by zip_file_add
     end
     else writeln('source=nil');
+  end;
+
+
+  if offset<>0 then
+  if 1=1 then
+    begin
+    if not FileExists(GetTempDir+'\'+path) then
+    begin
+    //if there is no temp file, it is unlikely that the file exist in our zip file...
+    //we need its current size
+    if zip_stat_index(arch,i,0,@stat)<>-1 then
+      begin
+      //writeln('zip file exists');
+      //we need a pointer to the file
+      file_:=nil;
+      file_:=zip_fopen_index(arch,i,0);
+      //in case of big files we may want to handle smaller chunks buffer...
+      data:=allocmem(stat.size );
+      size:= zip_fread (file_,data,stat.size);
+      zip_fclose (file_);
+      //we need to extract the file to temp
+      FS := TFileStream.Create(GetTempDir+'\'+path , fmOpenWrite or fmCreate);
+      fs.size:=offset+NumberOfBytesToWrite;
+      fs.seek(0,soFromBeginning);
+      fs.write(data^,size );
+      //writeln('written '+inttostr(size)+' bytes @0');
+      //modify this file
+      fs.Seek(offset,soFromBeginning);
+      NumberOfBytesWritten:=fs.write(Buffer ,NumberOfBytesToWrite );
+      //writeln('written '+inttostr(NumberOfBytesWritten)+' bytes @'+inttostr(offset));
+      //
+      fs.Free ;
+      freemem(data);
+      end
+      else
+      //it is likely that we will go this route : system is creating a file
+      begin
+      //writeln('zip file does not exists');
+      FS := TFileStream.Create(GetTempDir+'\'+path , fmOpenWrite or fmCreate);
+      fs.size:=offset+NumberOfBytesToWrite;
+      fs.Seek(offset,soFromBeginning);
+      fs.write(Buffer ,NumberOfBytesToWrite );
+      fs.Free ;
+      end;
+    //
+    //writeln(GetTempDir+'\'+path+' created');
+    end
+    else //if not FileExists(GetTempDir+'\'+path) then
+    begin
+    //modify this file
+    FS := TFileStream.Create(GetTempDir+'\'+path , fmOpenWrite );
+    fs.size:=offset+NumberOfBytesToWrite;
+    fs.Seek(offset,soFromBeginning);
+    NumberOfBytesWritten:=fs.write(Buffer ,NumberOfBytesToWrite );
+    //writeln('written '+inttostr(NumberOfBytesWritten)+' bytes @'+inttostr(offset));
+    fs.Free ;
+    //writeln(GetTempDir+'\'+path+' updated');
+    end;
+    //add it back to the zip on cleanup or closefile
+    end;
+
   Result := STATUS_SUCCESS;
 
 end;
 
 procedure _Cleanup(FileName: LPCWSTR;var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
+<<<<<<< HEAD
+var
+path:string;
+source,data:pointer;
+size:int64;
+fs:TFileStream;
+begin
+path := WideCharToString(filename);
+writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
+//
+if fileexists(GetTempDir+'\'+path) then
+  begin
+  //source:=zip_source_file(arch,pchar(GetTempDir+'\'+path),0,0);
+  //or
+  FS := TFileStream.Create(pchar(GetTempDir+'\'+path), fmOpenRead or fmShareDenyWrite);
+  size:=fs.Size;
+  data:=AllocMem(size );
+  fs.ReadBuffer(data^,size );
+  fs.Free ;
+  source:=zip_source_buffer(arch,data,size ,0);
+
+  //add or replace?
+  if source<>nil
+    //then if zip_file_replace (arch,DokanFileInfo.context-1,source,0)=-1
+    then if zip_file_add  (arch,pchar(ExtractFileName(path)),source,ZIP_FL_OVERWRITE)=-1
+      then writeln('zip_file_replace failed')
+      else
+      begin
+      writeln('zip_file_replace OK');
+      _refresh;
+      end;
+
+  if source=nil then writeln('source=nil');
+  {$i-}deletefile(GetTempDir+'\'+path);{$i-};
+  end;
+//
+=======
 var path:string;
   i:integer;
 begin
@@ -242,15 +395,23 @@ path := WideCharToString(filename);
 writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
 if arch=nil then exit;
 i:=DokanFileInfo.context-1;
+>>>>>>> cd585a6ef8a932abd02799303557ae1e7fea9e8e
   if DokanFileInfo.DeleteOnClose=true then
     begin
     //item is a file
-    if DokanFileInfo.IsDirectory =false
-      then
+    if DokanFileInfo.IsDirectory =false then
          begin
+<<<<<<< HEAD
+         if zip_delete (arch,DokanFileInfo.context-1 )=-1
+=======
          if zip_delete (arch,int64(i) )=-1
+>>>>>>> cd585a6ef8a932abd02799303557ae1e7fea9e8e
            then writeln('zip_delete failed')
-           else writeln('file has been deleted');
+           else
+           begin
+           writeln('file has been deleted');
+           _refresh;
+           end;//if zip_delete....
          end
       else
       //item is a directory
@@ -318,7 +479,8 @@ if i=-1 then
   begin
   writeln('_GetFileInformation:'+path+ ' no such file');
   exit;
-  end;
+  end
+  else DokanFileInfo.context:=i+1;
 
 
 try
@@ -380,7 +542,7 @@ i:=DokanFileInfo.context-1;
 if i=-1 then i:=zip_name_locate(arch,pchar(path),0);
 if i=-1 then
   begin
-  writeln('_CreateFile:'+path+ ' no such file');
+  writeln('no such file - '+inttostr(creationDisposition));
   //this is needed so that files can execute
   if creationDisposition = CREATE_NEW
     then result := STATUS_SUCCESS
@@ -434,7 +596,7 @@ var
 err:integer;
 begin
 result:=false;
-archive:=filename;
+zipfile :=filename;
 init;
 //writeln(filename);
 //

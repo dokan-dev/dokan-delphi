@@ -958,6 +958,7 @@ path:string;
 source,data:pointer;
 size:int64;
 fs:TFileStream;
+i:integer;
 begin
 path := WideCharToString(filename);
 writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));

@@ -384,7 +384,12 @@ procedure onCloseFile(FileName: LPCWSTR;
 begin
 
 DbgPrint('CloseFile:'+FileName);
-//_CloseFile(FileName ,DokanFileInfo );
+try
+if assigned (_CloseFile)
+   then _CloseFile(FileName ,DokanFileInfo );
+except
+on e:exception do writeln('_CloseFile:'+e.message);
+end;
 end;
 
 procedure onCleanup(FileName: LPCWSTR;
@@ -394,9 +399,12 @@ var
 begin
 //
 DbgPrint('Cleanup: '+FileName);
-
-//_Cleanup(FileName,DokanFileInfo);
-
+try
+if assigned(_Cleanup)
+   then _Cleanup(FileName,DokanFileInfo);
+except
+on e:exception do writeln('_Cleanup:'+e.message);
+end;
 end;
 
 function onReadFile(FileName: LPCWSTR; var Buffer;
@@ -459,13 +467,8 @@ DbgPrint('GetFileInformation:'+FileName);
 //
 //Result := STATUS_SUCCESS;
 if assigned(_GetFileInformation) then
-result:=_GetFileInformation(FileName ,HandleFileInformation,DokanFileInfo);
+   result:=_GetFileInformation(FileName ,HandleFileInformation,DokanFileInfo);
 end;
-
-
-
-
-
 
 function onFindFiles(FileName: LPCWSTR;
                 FillFindData: TDokanFillFindData; // function pointer
@@ -512,9 +515,13 @@ var
 begin
 //
 DbgPrint('DeleteFile:'+FileName);
-result := STATUS_SUCCESS;
-exit;
-//
+//writeln('DeleteFile:'+FileName);
+try
+if assigned(_DeleteFile)
+   then result := _DeleteFile(filename,DokanFileInfo);
+except
+on e:exception do writeln('_DeleteFile:'+e.message);
+end;
 
 end;
 
@@ -533,7 +540,12 @@ var
 begin
 //
 DbgPrint('DeleteDirectory:'+FileName);
-result := STATUS_SUCCESS;
+try
+if assigned(_DeleteDirectory)
+   then result := _DeleteDirectory(FileName,DokanFileInfo);
+except
+on e:exception do writeln('_DeleteDirectory:'+e.message);
+end;
 
 end;
 
@@ -553,8 +565,12 @@ var
 begin
 DbgPrint('MoveFile %s -> %s\n\n', [FileName, NewFileName]);
 //
-result := STATUS_SUCCESS;
-//result:=_MoveFile(FileName,NewFileName,ReplaceIfExisting,DokanFileInfo);
+try
+if assigned(_MoveFile)
+   then result := _MoveFile(filename,newfilename,ReplaceIfExisting,DokanFileInfo);
+except
+on e:exception do writeln('_MoveFile:'+e.message);
+end;
 
 end;
 
@@ -650,8 +666,11 @@ var
   error: DWORD;
   securityDescriptorLength: DWORD;
 begin
-//
+//absolutely needed on win10?
+//will get "msdos fonction not valid" if not returning success
 DbgPrint('onGetFileSecurity:'+FileName);
+SecurityInformation := SecurityInformation and not SACL_SECURITY_INFORMATION;
+SecurityInformation := SecurityInformation and not BACKUP_SECURITY_INFORMATION;
 Result := STATUS_SUCCESS;
 end;
 
@@ -760,7 +779,11 @@ begin
   DbgPrint('Unmounted\n');
   //Result := STATUS_SUCCESS;
   if assigned(_unmount) then
+    begin
+    write('Unmounting...');
     result:=_unmount();
+    if result=status_success then write('Done.') else writeln('Failed.');
+    end;
   //
   FreeLibrary(fLibHandle);
   //free filesystem
@@ -805,9 +828,7 @@ begin
     '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
     'Examples:\n' +
     '\tprogram.exe /discover\n' +
-    '\tprogram.exe /r C:\\Users /l M:\t\t\t# Mirror C:\\Users as RootDirectory into a drive of letter M:\\.\n' +
-    '\tprogram.exe /r C:\\Users /l C:\\mount\\dokan\t# Mirror C:\\Users as RootDirectory into NTFS folder C:\\mount\\dokan.\n' +
-    '\tprogram.exe /r C:\\Users /l M: /n /u \\myfs\\myfs1\t# Mirror C:\\Users as RootDirectory into a network drive M:\\. with UNC \\\\myfs\\myfs1\n\n' +
+    '\tprogram.exe /r test.zip /l x /x proxy_7zip.dll\n' +
     'Unmount the drive with CTRL + C in the console or alternatively via ''dokanctl /u MountPoint''.\n'));
 end;
 
@@ -1058,15 +1079,17 @@ begin
   //dokanOperations^.FindStreams := onFindStreams;
   dokanOperations^.Mounted := onMounted;
 
-  //_nfsmount(WideCharToString(RootDirectory) );
   //create filesyste ressources
+  write('Mounting...');
   if _mount(WideCharToString(RootDirectory))=false then
     begin
     Dispose(dokanOptions);
     Dispose(dokanOperations);
     Result := EXIT_FAILURE ;
+    writeln('failed.');
     Exit;
-    end;
+    end
+    else writeln('done.');
 
   status := DokanMain(dokanOptions^, dokanOperations^);
   case (status) of

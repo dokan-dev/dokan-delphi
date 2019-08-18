@@ -1071,7 +1071,7 @@ begin
   //dokanOperations^.SetAllocationSize := onSetAllocationSize;
   dokanOperations^.LockFile := onLockFile;  //only return success
   dokanOperations^.UnlockFile := onUnlockFile; //only return success
-  dokanOperations^.GetFileSecurity := onGetFileSecurity;
+  //dokanOperations^.GetFileSecurity := onGetFileSecurity;
   //dokanOperations^.SetFileSecurity := onSetFileSecurity;
   dokanOperations^.GetDiskFreeSpace := nil; // onDokanGetDiskFreeSpace;
   dokanOperations^.GetVolumeInformation := onGetVolumeInformation;

@@ -953,7 +953,6 @@ if i=-1 then
 end;
 
 procedure _Cleanup(FileName: LPCWSTR;var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
-<<<<<<< HEAD
 var
 path:string;
 source,data:pointer;
@@ -962,6 +961,8 @@ fs:TFileStream;
 begin
 path := WideCharToString(filename);
 writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
+if arch=nil then exit;
+i:=DokanFileInfo.context-1;
 //
 if fileexists(GetTempDir+'\'+path) then
   begin
@@ -971,7 +972,7 @@ if fileexists(GetTempDir+'\'+path) then
   size:=fs.Size;
   data:=AllocMem(size );
   fs.ReadBuffer(data^,size );
-  fs.Free ;
+  fs.Free ;    
   source:=zip_source_buffer(arch,data,size ,0);
 
   //add or replace?
@@ -989,25 +990,14 @@ if fileexists(GetTempDir+'\'+path) then
   {$i-}deletefile(GetTempDir+'\'+path);{$i-};
   end;
 //
-=======
-var path:string;
-  i:integer;
-begin
-path := WideCharToString(filename);
-writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
-if arch=nil then exit;
-i:=DokanFileInfo.context-1;
->>>>>>> cd585a6ef8a932abd02799303557ae1e7fea9e8e
+
+
   if DokanFileInfo.DeleteOnClose=true then
     begin
     //item is a file
     if DokanFileInfo.IsDirectory =false then
          begin
-<<<<<<< HEAD
-         if zip_delete (arch,DokanFileInfo.context-1 )=-1
-=======
          if zip_delete (arch,int64(i) )=-1
->>>>>>> cd585a6ef8a932abd02799303557ae1e7fea9e8e
            then writeln('zip_delete failed')
            else
            begin
@@ -1020,7 +1010,8 @@ i:=DokanFileInfo.context-1;
       begin
       end;
 
-    end;
+    end;//  if DokanFileInfo.DeleteOnClose=true then
+    
 end;
 
 function _DeleteFile(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
@@ -1215,4 +1206,4 @@ end;
 end;
 
 end.
->>>>>>> 6f04f940243a6d0a67a48aca3d1813213e3ba62d
+

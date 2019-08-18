@@ -34,4 +34,5 @@ exports
 
 begin
   writeln('proxy_libzip.dll');
+  //_Cleanup('',DOKAN_FILE_INFO(nil^));
 end.

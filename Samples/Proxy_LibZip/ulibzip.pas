@@ -116,6 +116,25 @@ begin
     else result:=true;
 end;
 
+function _locate(path:string;var DokanFileInfo: DOKAN_FILE_INFO):int64;
+var
+temp:string;
+begin
+result:=-1;
+  //de-normalize
+  temp:=stringreplace(path,'\','/',[rfReplaceAll, rfIgnoreCase]); //libzip specific
+  //writeln(temp); //debug
+  //a new file?
+  result:=zip_name_locate(arch,pchar(temp),0);
+  //a new folder?
+  if result=-1 then
+    begin
+    result:=zip_name_locate(arch,pchar(temp+'/'),0);
+    if result<>-1 then DokanFileInfo.IsDirectory :=true;
+    end;
+
+end;
+
 {
 
 ExtractFileDir('C:\Path\Path2') gives 'C:\Path'
@@ -156,11 +175,16 @@ writeln('_FindFiles:'+FileName);
    begin
 
 
-    //if string(filename)='\' then
     if 1=1 then
     begin
-    //if {(pos('\',Itempath[i])=0) and} (filename=extractfiledir('\'+stat.name )) then
-    if Occurrences('/',stat.name)<=1 then
+    temp:=stat.name;
+    //remove trailing '/'
+    if temp[length(temp)]='/' then system.delete(temp,length(temp),1);
+    //normalize it
+    temp:=stringreplace(temp,'/','\',[rfReplaceAll, rfIgnoreCase]);
+    //writeln(filename+' - '+temp); //debug
+    if filename=extractfiledir('\'+temp) then
+    //if Occurrences('/',stat.name)<=1 then //initial cheat mode to restrict to root
       begin
       FillChar (findData ,sizeof(findData ),0);
       //
@@ -168,7 +192,9 @@ writeln('_FindFiles:'+FileName);
             then findData.dwFileAttributes := FILE_ATTRIBUTE_NORMAL
             else findData.dwFileAttributes := FILE_ATTRIBUTE_DIRECTORY;
       //
-      widetemp:=stat.name ; //extractfilename(Itempath[i]);
+
+      widetemp:=ExtractFileName(temp);
+      //if widetemp[length(widetemp)]='/' then system.delete(widetemp,length(widetemp),1);
       Move(widetemp[1],  findData.cFileName,Length(widetemp)*Sizeof(Widechar));
       //
         findData.nFileSizeHigh :=LARGE_INTEGER(stat.size).HighPart;
@@ -196,16 +222,19 @@ end;
 end;
 
 procedure _fseek(file_:pointer;offset:longlong);
+const step:integer=1024*1024; //1MB
 var
 dummy:pointer;
+len:integer;
 begin
-while offset>=0 do
+while offset>0 do
   begin
-  dummy:=allocmem(min(offset,1024));
-  zip_fread (file_,dummy,min(offset,1024));
-  writeln('read '+inttostr(min(offset,1024)));
+  len:=min(offset,step);
+  dummy:=allocmem(len);
+  zip_fread (file_,dummy,len);
+  //writeln('read '+inttostr(len));
   freemem(dummy);
-  dec(offset,1024);
+  dec(offset,len);
   end;
 end;
 
@@ -279,11 +308,13 @@ i:=DokanFileInfo.context-1;
 if i=-1 then
   begin
   writeln('file without a context');
-  //exit;
+  //exit; //we need to handle creation/addition of new files
   end;
 
 
-  
+  //first call=creation - we add the file to the zip
+  //we could this part and rely on the cleanup
+  //but then we should handle the read part (from temp) in readfile and getfileinformation, etc
   if offset=0 then
   begin
   source:=nil;
@@ -309,7 +340,7 @@ if i=-1 then
     begin
     if not FileExists(GetTempDir+'\'+path) then
     begin
-    //if there is no temp file, it is unlikely that the file exist in our zip file...
+    //second call - we dump the first part in the zip to a temp file + the new second part coming in
     //we need its current size
     if zip_stat_index(arch,i,0,@stat)<>-1 then
       begin
@@ -336,7 +367,7 @@ if i=-1 then
       freemem(data);
       end
       else
-      //it is likely that we will go this route : system is creating a file
+      //temp file does not exist? zip file does not exist? unlikely for now
       begin
       //writeln('zip file does not exists');
       FS := TFileStream.Create(GetTempDir+'\'+path , fmOpenWrite or fmCreate);
@@ -350,7 +381,7 @@ if i=-1 then
     end
     else //if not FileExists(GetTempDir+'\'+path) then
     begin
-    //modify this file
+    //3rd+ call(s) - temp file exist so modify this file
     FS := TFileStream.Create(GetTempDir+'\'+path , fmOpenWrite );
     fs.size:=offset+NumberOfBytesToWrite;
     fs.Seek(offset,soFromBeginning);
@@ -375,6 +406,7 @@ fs:TFileStream;
 i:integer;
 begin
 path := WideCharToString(filename);
+if path='\' then exit; //nothing to do.
 writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
 if arch=nil then exit;
 i:=DokanFileInfo.context-1;
@@ -467,7 +499,7 @@ var
 begin
   result:=STATUS_NO_SUCH_FILE;
 path := WideCharToString(filename);
-writeln('_GetFileInformation:'+path+ ' '+inttostr(DokanFileInfo.context));
+//writeln('_GetFileInformation:'+path+ ' '+inttostr(DokanFileInfo.context)); //too verbose
 
 //root folder need to a success result + directory attribute...
 if path='\' then
@@ -477,18 +509,28 @@ if path='\' then
   exit;
   end;
 
+writeln('_GetFileInformation:'+path+ ' '+inttostr(DokanFileInfo.context));
+
 if arch=nil then exit;
 
 if path[1]='\' then system.delete(path,1,1);
 
 i:=DokanFileInfo.context-1;
-if i=-1 then i:=zip_name_locate(arch,pchar(path),0);
+//not convinced the below is really needed - should only happen in createfile
+//actually needed when we add a new file to the archive
+if i=-1 then
+  begin
+  i:=_locate(path,DokanFileInfo);
+  //
+  DokanFileInfo.Context :=i+1;
+  if DokanFileInfo.Context<>0 then  writeln('new context:'+inttostr(DokanFileInfo.Context));
+  end;
 if i=-1 then
   begin
   writeln('_GetFileInformation:'+path+ ' no such file');
   exit;
-  end
-  else DokanFileInfo.context:=i+1;
+  end;
+
 
 
 try
@@ -524,19 +566,21 @@ var
   creationDisposition: DWORD;
   fileAttributesAndFlags: DWORD;
   genericDesiredAccess: ACCESS_MASK;
-path:string;
+path,temp:string;
 i:integer;
 stat:tzip_stat;
 begin
 Result := STATUS_SUCCESS;
 path := WideCharToString(filename);
-writeln('_CreateFile:'+path);
+//writeln('_CreateFile:'+path); //too verbose.
 
 if path='\' then
   begin
   DokanFileInfo.IsDirectory:=true;
   exit;
   end;
+
+writeln('_CreateFile:'+path+' '+inttostr(DokanFileInfo.context));
 
 if arch=nil then exit;
 
@@ -547,10 +591,16 @@ DokanMapKernelToUserCreateFileFlags(
 
 if path[1]='\' then system.delete(path,1,1);
 i:=DokanFileInfo.context-1;
-if i=-1 then i:=zip_name_locate(arch,pchar(path),0);
 if i=-1 then
   begin
-  writeln('no such file - '+inttostr(creationDisposition));
+  i:=_locate(path,DokanFileInfo);
+  //
+  DokanFileInfo.Context :=i+1;
+  if DokanFileInfo.Context<>0 then writeln('new context:'+inttostr(DokanFileInfo.Context));
+  end;
+if i=-1 then
+  begin
+  writeln('no such file - '+inttostr(creationDisposition)+' - '+booltostr(DokanFileInfo.IsDirectory));
   //this is needed so that files can execute
   if creationDisposition = CREATE_NEW
     then result := STATUS_SUCCESS
@@ -562,14 +612,8 @@ if i=-1 then
 
 //we could re use it in the readfile
 //and eventually in the close if we want to keep stream opened
-DokanFileInfo.Context :=i+1;
-writeln('DokanFileInfo.Context:'+inttostr(i+1));
 
- {
- if stat.size >0
-            then DokanFileInfo.IsDirectory := false
-            else DokanFileInfo.IsDirectory := True;
- }
+
  //DbgPrint
  if (creationDisposition = CREATE_NEW) then begin
     DbgPrint('\tCREATE_NEW\n');
@@ -604,6 +648,15 @@ var
 err:integer;
 begin
 result:=false;
+{
+writeln('extractfilepath:'+extractfilepath('folderone\'));
+writeln('extractfilepath:'+extractfilepath('folderone\test.txt'));
+//no trailing '\'
+writeln('extractfiledir:'+extractfiledir('folderone\'));
+writeln('extractfiledir:'+extractfiledir('folderone\test.txt'));
+exit;
+}
+//
 zipfile :=filename;
 init;
 //writeln(filename);

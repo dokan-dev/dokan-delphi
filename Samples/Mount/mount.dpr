@@ -828,7 +828,7 @@ begin
     '  /f User mode Lock\t\t\t\t Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it.\n' +
     '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
     'Examples:\n' +
-    '\tprogram.exe /discover\n' +
+    //'\tprogram.exe /discover\n' +
     '\tprogram.exe /r test.zip /l x /x proxy_7zip.dll\n' +
     'Unmount the drive with CTRL + C in the console or alternatively via ''dokanctl /u MountPoint''.\n'));
 end;

@@ -7,3 +7,5 @@
 *.bak
 *.compiled
 *.ppu
+Samples/Mount/mount.exe
+Samples/Mount/test.zip

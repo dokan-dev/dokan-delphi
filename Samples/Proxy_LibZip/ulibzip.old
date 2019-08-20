@@ -2,7 +2,7 @@ unit ulibzip;
 
 interface
 
-uses  windows,classes,sysutils,strutils,math,
+uses  windows,classes,sysutils,strutils,
       Dokan ,
       DokanWin ,
       dateutils,
@@ -195,20 +195,6 @@ end;
 
 end;
 
-procedure _fseek(file_:pointer;offset:longlong);
-var
-dummy:pointer;
-begin
-while offset>=0 do
-  begin
-  dummy:=allocmem(min(offset,1024));
-  zip_fread (file_,dummy,min(offset,1024));
-  writeln('read '+inttostr(min(offset,1024)));
-  freemem(dummy);
-  dec(offset,1024);
-  end;
-end;
-
 function _ReadFile(FileName: LPCWSTR; var Buffer;
                         BufferLength: DWORD;
                         var ReadLength: DWORD;
@@ -220,6 +206,7 @@ dummy:pointer;
 file_:pointer;
 path:string;
 begin
+
 path := WideCharToString(filename);
 if arch=nil then exit;
 writeln('_ReadFile:'+path+' '+inttostr(BufferLength)+'@'+inttostr(Offset));
@@ -238,15 +225,12 @@ if file_=nil then
    exit;
    end;
 //cheap way to implement seek - we small implement small chunks of buffer
-{
-if offset>0 then
+if offset<>0 then
   begin
   dummy:=allocmem(offset);
   zip_fread (file_,dummy,offset);
   freemem(dummy);
   end;
-}
-if offset>0 then _fseek(file_,offset);
 ReadLength:= dword(zip_fread (file_,@buffer,BufferLength));
 zip_fclose (file_);
 //
@@ -372,12 +356,9 @@ path:string;
 source,data:pointer;
 size:int64;
 fs:TFileStream;
-i:integer;
 begin
 path := WideCharToString(filename);
 writeln('_Cleanup:'+path+ ' '+inttostr(DokanFileInfo.context));
-if arch=nil then exit;
-i:=DokanFileInfo.context-1;
 //
 if fileexists(GetTempDir+'\'+path) then
   begin
@@ -387,7 +368,7 @@ if fileexists(GetTempDir+'\'+path) then
   size:=fs.Size;
   data:=AllocMem(size );
   fs.ReadBuffer(data^,size );
-  fs.Free ;    
+  fs.Free ;
   source:=zip_source_buffer(arch,data,size ,0);
 
   //add or replace?
@@ -405,14 +386,12 @@ if fileexists(GetTempDir+'\'+path) then
   {$i-}deletefile(GetTempDir+'\'+path);{$i-};
   end;
 //
-
-
   if DokanFileInfo.DeleteOnClose=true then
     begin
     //item is a file
     if DokanFileInfo.IsDirectory =false then
          begin
-         if zip_delete (arch,int64(i) )=-1
+         if zip_delete (arch,DokanFileInfo.context-1 )=-1
            then writeln('zip_delete failed')
            else
            begin
@@ -425,8 +404,7 @@ if fileexists(GetTempDir+'\'+path) then
       begin
       end;
 
-    end;//  if DokanFileInfo.DeleteOnClose=true then
-    
+    end;
 end;
 
 function _DeleteFile(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;

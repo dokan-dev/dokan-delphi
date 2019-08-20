@@ -20,8 +20,8 @@
         <Filename Value="ulibzip.pas"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="350"/>
-        <CursorPos X="41" Y="360"/>
+        <TopLine Value="151"/>
+        <CursorPos X="6" Y="157"/>
         <UsageCount Value="106"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
@@ -73,7 +73,7 @@
       </Position1>
       <Position2>
         <Filename Value="ulibzip.pas"/>
-        <Caret Line="239" Column="13" TopLine="1133"/>
+        <Caret Line="360" Column="41" TopLine="335"/>
       </Position2>
     </JumpHistory>
   </ProjectSession>

@@ -1,31 +1,27 @@
-// Release 1.2.0.1000
-// commit: f6de99b914b8f858acf940073ae8836eb476de7f
-
 (*
+  Dokan API wrapper for Delphi based on Release 1.4.0.1000
+  https://github.com/dokan-dev/dokany/releases/tag/v1.4.0.1000
+  Copyright (C) 2019 - 2020 Sven Harazim
+
   Dokan : user-mode file system library for Windows
 
-  Copyright (C) 2015 - 2018 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
+  Copyright (C) 2015 - 2019 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
+  Copyright (C) 2020 Google, Inc.
   Copyright (C) 2007 - 2011 Hiroki Asakawa <info@dokan-dev.net>
 
-  https://dokan-dev.github.io/
+  http://dokan-dev.github.io
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+  This program is free software; you can redistribute it and/or modify it under
+  the terms of the GNU Lesser General Public License as published by the Free
+  Software Foundation; either version 3 of the License, or (at your option) any
+  later version.
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+  This program is distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+  FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+  You should have received a copy of the GNU Lesser General Public License along
+  with this program. If not, see <http://www.gnu.org/licenses/>.
 *)
 
 unit Dokan;
@@ -45,24 +41,93 @@ uses
 const
   DokanLibrary = 'dokan1.dll';
 
-  //The current Dokan version (ver 1.2.0)
-  DOKAN_VERSION = 120;
+  //The current Dokan version (ver 1.4.0)
+  DOKAN_VERSION = 140;
   //Minimum Dokan version (ver 1.1.0) accepted
   DOKAN_MINIMUM_COMPATIBLE_VERSION = 110;
-  DOKAN_MAX_INSTANCES = 32;
 
-  DOKAN_OPTION_DEBUG = 1;                //Enable ouput debug message
-  DOKAN_OPTION_STDERR = 2;               //Enable ouput debug message to stderr
-  DOKAN_OPTION_ALT_STREAM = 4;           //Use alternate stream
-  DOKAN_OPTION_WRITE_PROTECT = 8;        //Enable mount drive as write-protected
-  DOKAN_OPTION_NETWORK = 16;             //Use network drive - Dokan network provider needs to be installed
-  DOKAN_OPTION_REMOVABLE = 32;           //Use removable drive
-  DOKAN_OPTION_MOUNT_MANAGER = 64;       //Use mount manager
-  DOKAN_OPTION_CURRENT_SESSION = 128;    //Mount the drive on current session only
-  DOKAN_OPTION_FILELOCK_USER_MODE = 256; //Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it
-
+  //Enable ouput debug message
+  DOKAN_OPTION_DEBUG = 1;
+  //Enable ouput debug message to stderr
+  DOKAN_OPTION_STDERR = 2;
+  //Enable the use of alternate stream paths in the form
+  //<file-name>:<stream-name>. If this is not specified then the driver will
+  //fail any attempt to access a path with a colon.
+  DOKAN_OPTION_ALT_STREAM = 4;
+  //Enable mount drive as write-protected
+  DOKAN_OPTION_WRITE_PROTECT = 8;
+  //Use network drive - Dokan network provider needs to be installed
+  DOKAN_OPTION_NETWORK = 16;
+  //Use removable drive
+  DOKAN_OPTION_REMOVABLE = 32;
+  //Use mount manager
+  DOKAN_OPTION_MOUNT_MANAGER = 64;
+  //Mount the drive on current session only
+  DOKAN_OPTION_CURRENT_SESSION = 128;
+  //Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it
+  DOKAN_OPTION_FILELOCK_USER_MODE = 256;
+  //Whether DokanNotifyXXX functions should be enabled, which requires this
+  //library to maintain a special handle while the file system is mounted.
+  //Without this flag, the functions always return FALSE if invoked.
+  DOKAN_OPTION_ENABLE_NOTIFICATION_API = 512;
+  //Whether to disable any oplock support on the volume.
+  //Regular range locks are enabled regardless.
+  DOKAN_OPTION_DISABLE_OPLOCKS = 1024;
+  //The advantage of the FCB GC approach is that it prevents filter drivers (Anti-virus)
+  //from exponentially slowing down procedures like zip file extraction due to
+  //repeatedly rebuilding state that they attach to the FCB header.
+  DOKAN_OPTION_ENABLE_FCB_GARBAGE_COLLECTION = 2048;
 
 type
+  //Dokan mount options used to describe Dokan device behavior.
+  _DOKAN_OPTIONS = record
+    Version: USHORT;          //Version of the Dokan features requested without dots (version "123" is equal to Dokan version 1.2.3).
+    ThreadCount: USHORT;      //Number of threads to be used by Dokan library internally. More threads will handle more events at the same time.
+    Options: ULONG;           //Features enabled for the mount. See \ref DOKAN_OPTION.
+    GlobalContext: ULONG64;   //FileSystem can store anything here.
+    MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or a folder path "C:\mount\dokan" on a NTFS partition.
+    UNCName: LPCWSTR;         //UNC Name for the Network Redirector
+    Timeout: ULONG;           //Max timeout in milliseconds of each request before Dokan gives up to wait events to complete.
+    AllocationUnitSize: ULONG;//Allocation Unit Size of the volume. This will affect the file size.
+    SectorSize: ULONG;        //Sector Size of the volume. This will affect the file size.
+  end;
+  DOKAN_OPTIONS = _DOKAN_OPTIONS;
+  PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
+  TDokanOptions = DOKAN_OPTIONS;
+  PDokanOptions = PDOKAN_OPTIONS;
+
+  //Dokan file information on the current operation.
+  _DOKAN_FILE_INFO = record
+    Context: ULONG64;
+    DokanContext: ULONG64;
+    DokanOptions: PDOKAN_OPTIONS;
+    ProcessId: ULONG;
+    IsDirectory: ByteBool;
+    DeleteOnClose: ByteBool;
+    PagingIo: ByteBool;
+    SynchronousIo: ByteBool;
+    Nocache: ByteBool;
+    WriteToEndOfFile: ByteBool;
+  end;
+  DOKAN_FILE_INFO = _DOKAN_FILE_INFO;
+  PDOKAN_FILE_INFO = ^_DOKAN_FILE_INFO;
+  TDokanFileInfo = DOKAN_FILE_INFO;
+  PDokanFileInfo = PDOKAN_FILE_INFO;
+
+  //FillFindData Used to add an entry in FindFiles operation
+  //return 1 if buffer is full, otherwise 0 (currently it never returns 1)
+  TDokanFillFindData = function (
+    var FindData: WIN32_FIND_DATAW;
+    var DokanFileInfo: DOKAN_FILE_INFO
+  ): Integer; stdcall;
+
+  //FillFindStreamData Used to add an entry in FindStreams
+  //return 1 if buffer is full, otherwise 0 (currently it never returns 1)
+  TDokanFillFindStreamData = function (
+    var FindStreamData: WIN32_FIND_STREAM_DATA;
+    var DokanFileInfo: DOKAN_FILE_INFO
+  ): Integer; stdcall;
+
   _DOKAN_ACCESS_STATE = record
     SecurityEvaluated: ByteBool;
     GenerateAudit: ByteBool;
@@ -89,49 +154,6 @@ type
   PDOKAN_IO_SECURITY_CONTEXT = ^_DOKAN_IO_SECURITY_CONTEXT;
   TDokanIOSecurityContext = DOKAN_IO_SECURITY_CONTEXT;
   PDokanIOSecurityContext = PDOKAN_IO_SECURITY_CONTEXT;
-
-  _DOKAN_OPTIONS = record
-    Version: USHORT;
-    ThreadCount: USHORT;
-    Options: ULONG;
-    GlobalContext: ULONG64;
-    MountPoint: LPCWSTR;
-    UNCName: LPCWSTR;
-    Timeout: ULONG;
-    AllocationUnitSize: ULONG;
-    SectorSize: ULONG;
-  end;
-  DOKAN_OPTIONS = _DOKAN_OPTIONS;
-  PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
-  TDokanOptions = DOKAN_OPTIONS;
-  PDokanOptions = PDOKAN_OPTIONS;
-
-  _DOKAN_FILE_INFO = record
-    Context: ULONG64;
-    DokanContext: ULONG64;
-    DokanOptions: PDOKAN_OPTIONS;
-    ProcessId: ULONG;
-    IsDirectory: ByteBool;
-    DeleteOnClose: ByteBool;
-    PagingIo: ByteBool;
-    SynchronousIo: ByteBool;
-    Nocache: ByteBool;
-    WriteToEndOfFile: ByteBool;
-  end;
-  DOKAN_FILE_INFO = _DOKAN_FILE_INFO;
-  PDOKAN_FILE_INFO = ^_DOKAN_FILE_INFO;
-  TDokanFileInfo = DOKAN_FILE_INFO;
-  PDokanFileInfo = PDOKAN_FILE_INFO;
-
-  TDokanFillFindData = function (
-    var FindData: WIN32_FIND_DATAW;
-    var DokanFileInfo: DOKAN_FILE_INFO
-  ): Integer; stdcall;
-
-  TDokanFillFindStreamData = function (
-    var FindStreamData: WIN32_FIND_STREAM_DATA;
-    var DokanFileInfo: DOKAN_FILE_INFO
-  ): Integer; stdcall;
 
   TDokanZwCreateFile = function (
     FileName: LPCWSTR;
@@ -363,17 +385,22 @@ var
   DokanMain: function (var Options: DOKAN_OPTIONS; var Operations: DOKAN_OPERATIONS): Integer; stdcall = nil;
   DokanUnmount: function (DriveLetter: WCHAR): BOOL; stdcall = nil;
   DokanRemoveMountPoint: function (MountPoint: LPCWSTR): BOOL; stdcall = nil;
-  //DokanRemoveMountPointEx: function (MountPoint: LPCWSTR; Safe: BOOL): BOOL; stdcall = nil;
   DokanIsNameInExpression: function (Expression, Name: LPCWSTR; IgnoreCase: BOOL): BOOL; stdcall = nil;
   DokanVersion: function (): ULONG; stdcall = nil;
   DokanDriverVersion: function (): ULONG; stdcall = nil;
   DokanResetTimeout: function (Timeout: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): BOOL; stdcall = nil;
   DokanOpenRequestorToken: function (var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall = nil;
-  DokanGetMountPointList: function (list: PDOKAN_CONTROL; length: ULONG; uncOnly: BOOL;
-    var nbRead: ULONG): BOOL; stdcall = nil;
-  DokanMapKernelToUserCreateFileFlags: procedure (
-    DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions, CreateDisposition: ULONG;
-    outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags, outCreationDisposition: PDWORD); stdcall = nil;
+  DokanGetMountPointList: function (uncOnly: BOOL; var nbRead: ULONG): PDOKAN_CONTROL; stdcall = nil;
+  DokanReleaseMountPointList: procedure (list: PDOKAN_CONTROL); stdcall = nil;
+  DokanMapKernelToUserCreateFileFlags: procedure (DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions,
+    CreateDisposition: ULONG;outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags,
+    outCreationDisposition: PDWORD); stdcall = nil;
+  DokanNotifyCreate: function (FilePath: LPCWSTR; IsDirectory : BOOL) : BOOL;
+  DokanNotifyDelete: function (FilePath : LPCWSTR; BOOL IsDirectory) : BOOL;
+  DokanNotifyUpdate: function (FilePath : LPCWSTR) : BOOL;
+  DokanNotifyXAttrUpdate: function (FilePath : LPCWSTR) : BOOL;
+  DokanNotifyRename: function (OldPath: LPCWSTR; NewPath : LPCWSTR; IsDirectory : BOOL;
+    IsInSameDirectory: BOOL) : BOOL;
   DokanNtStatusFromWin32: function (Error: DWORD): NTSTATUS; stdcall = nil;
 
 function DokanLoad(const LibFileName: string = DokanLibrary): Boolean;
@@ -384,17 +411,22 @@ procedure DokanFree();
 function DokanMain(var Options: DOKAN_OPTIONS; var Operations: DOKAN_OPERATIONS): Integer; stdcall;
 function DokanUnmount(DriveLetter: WCHAR): BOOL; stdcall;
 function DokanRemoveMountPoint(MountPoint: LPCWSTR): BOOL; stdcall;
-//function DokanRemoveMountPointEx(MountPoint: LPCWSTR; Safe: BOOL): BOOL; stdcall;
 function DokanIsNameInExpression(Expression, Name: LPCWSTR; IgnoreCase: BOOL): BOOL; stdcall;
 function DokanVersion(): ULONG; stdcall;
 function DokanDriverVersion(): ULONG; stdcall;
 function DokanResetTimeout(Timeout: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): BOOL; stdcall;
 function DokanOpenRequestorToken(var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall;
-function DokanGetMountPointList(list: PDOKAN_CONTROL; length: ULONG; uncOnly: BOOL;
-  var nbRead: ULONG): BOOL; stdcall;
-procedure DokanMapKernelToUserCreateFileFlags(
-  DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions, CreateDisposition: ULONG;
-  outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags, outCreationDisposition: PDWORD); stdcall;
+function DokanGetMountPointList(uncOnly: BOOL; var nbRead: ULONG): PDOKAN_CONTROL; stdcall;
+procedure DokanReleaseMountPointList(list: PDOKAN_CONTROL);
+procedure DokanMapKernelToUserCreateFileFlags(DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions,
+  CreateDisposition: ULONG; outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags,
+  outCreationDisposition: PDWORD); stdcall;
+function DokanNotifyCreate(FilePath: LPCWSTR; IsDirectory : BOOL) : BOOL; stdcall;
+function DokanNotifyDelete(FilePath : LPCWSTR; IsDirectory : BOOL) : BOOL; stdcall;
+function DokanNotifyUpdate(FilePath : LPCWSTR) : BOOL; stdcall;
+function DokanNotifyXAttrUpdate(FilePath : LPCWSTR) : BOOL; stdcall;
+function DokanNotifyRename(OldPath: LPCWSTR; NewPath : LPCWSTR; IsDirectory : BOOL;
+  IsInSameDirectory: BOOL) : BOOL; stdcall;
 function DokanNtStatusFromWin32(Error: DWORD): NTSTATUS; stdcall;
 
 {$endif DOKAN_EXPLICIT_LINK}
@@ -434,7 +466,13 @@ begin
   DokanResetTimeout := GetProc('DokanResetTimeout');
   DokanOpenRequestorToken := GetProc('DokanOpenRequestorToken');
   DokanGetMountPointList := GetProc('DokanGetMountPointList');
+  DokanReleaseMountPointList := GetProc('DokanReleaseMountPointList');
   DokanMapKernelToUserCreateFileFlags := GetProc('DokanMapKernelToUserCreateFileFlags');
+  DokanNotifyCreate := GetProc('DokanNotifyCreate');
+  DokanNotifyDelete := GetProc('DokanNotifyDelete');
+  DokanNotifyUpdate := GetProc('DokanNotifyUpdate');
+  DokanNotifyXAttrUpdate := GetProc('DokanNotifyXAttrUpdate');
+  DokanNotifyRename := GetProc('DokanNotifyRename');
   DokanNtStatusFromWin32 := GetProc('DokanNtStatusFromWin32');
 
   if not Result then
@@ -456,7 +494,13 @@ begin
   DokanResetTimeout := nil;
   DokanOpenRequestorToken := nil;
   DokanGetMountPointList := nil;
+  DokanReleaseMountPointList := nil;
   DokanMapKernelToUserCreateFileFlags := nil;
+  DokanNotifyCreate := nil;
+  DokanNotifyDelete := nil;
+  DokanNotifyUpdate := nil;
+  DokanNotifyXAttrUpdate := nil;
+  DokanNotifyRename := nil;
   DokanNtStatusFromWin32 := nil;
 
   FreeLibrary(DokanLibHandle);
@@ -475,7 +519,13 @@ function DokanDriverVersion; external DokanLibrary;
 function DokanResetTimeout; external DokanLibrary;
 function DokanOpenRequestorToken; external DokanLibrary;
 function DokanGetMountPointList; external DokanLibrary;
+procedure DokanReleaseMountPointList; external DokanLibrary;
 procedure DokanMapKernelToUserCreateFileFlags; external DokanLibrary;
+function DokanNotifyCreate; external DokanLibrary;
+function DokanNotifyDelete; external DokanLibrary;
+function DokanNotifyUpdate; external DokanLibrary;
+function DokanNotifyXAttrUpdate; external DokanLibrary;
+function DokanNotifyRename; external DokanLibrary;
 function DokanNtStatusFromWin32; external DokanLibrary;
 
 {$endif DOKAN_EXPLICIT_LINK}

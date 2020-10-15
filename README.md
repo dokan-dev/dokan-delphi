@@ -7,10 +7,15 @@ you to make a file system on Win32/Win64 environment.
 
 ## Licensing
 Dokan Delphi/FreePascal Binding is distributed under a version of the "MIT License",
-which is a BSD-like license. See the 'license.mit.txt' file for details.
+which is a BSD-like license. See the 'LICENSE.md' file for details.
 
 ## Environment
 Delphi/FreePascal and Dokan library
+
+## Supported Dokan Version
+https://github.com/dokan-dev/dokany\\
+1.4.0.1000\\
+https://github.com/dokan-dev/dokany/releases/tag/v1.4.0.1000
 
 ## How to write a file system
 To make a file system, an application needs to implement IDokanOperations interface.

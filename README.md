@@ -13,8 +13,10 @@ which is a BSD-like license. See the 'LICENSE.md' file for details.
 Delphi/FreePascal and Dokan library
 
 ## Supported Dokan Version
-https://github.com/dokan-dev/dokany\\
-1.4.0.1000\\
+https://github.com/dokan-dev/dokany
+
+1.4.0.1000
+
 https://github.com/dokan-dev/dokany/releases/tag/v1.4.0.1000
 
 ## How to write a file system

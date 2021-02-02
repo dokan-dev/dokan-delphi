@@ -1,7 +1,7 @@
 (*
-  Dokan API wrapper for Delphi based on Release 1.4.0.1000
-  https://github.com/dokan-dev/dokany/releases/tag/v1.4.0.1000
-  Copyright (C) 2019 - 2020 Sven Harazim
+  Dokan API wrapper for Delphi based on Release 1.4.1.1000
+  https://github.com/dokan-dev/dokany/releases/tag/v1.4.1.1000
+  Copyright (C) 2019 - 2021 Sven Harazim
 
   Dokan : user-mode file system library for Windows
 

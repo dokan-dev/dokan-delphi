@@ -167,6 +167,7 @@ type
 var
   g_UseStdErr: Boolean;
   g_DebugMode: Boolean;
+  g_CaseSensitive: Boolean;
   g_HasSeSecurityPrivilege: Boolean;
   g_ImpersonateCallerUser: Boolean;
 
@@ -449,6 +450,9 @@ begin
   MirrorCheckFlag(fileAttributesAndFlags, SECURITY_CONTEXT_TRACKING, 'SECURITY_CONTEXT_TRACKING');
   MirrorCheckFlag(fileAttributesAndFlags, SECURITY_EFFECTIVE_ONLY, 'SECURITY_EFFECTIVE_ONLY');
   MirrorCheckFlag(fileAttributesAndFlags, SECURITY_SQOS_PRESENT, 'SECURITY_SQOS_PRESENT');
+
+  if (g_CaseSensitive) then
+    fileAttributesAndFlags := fileAttributesAndFlags or FILE_FLAG_POSIX_SEMANTICS;
 
   if (creationDisposition = CREATE_NEW) then begin
     DbgPrint('\tCREATE_NEW\n');
@@ -1493,9 +1497,12 @@ begin
   if (@MaximumComponentLength <> nil) then
     MaximumComponentLength := 255;
   if (@FileSystemFlags <> nil) then
-    FileSystemFlags := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES or
-                     FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
+  begin
+    FileSystemFlags := FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
                      FILE_PERSISTENT_ACLS or FILE_NAMED_STREAMS;
+    if (g_CaseSensitive) then
+      FileSystemFlags := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES;
+  end;
 
   volumeRoot[0] := RootDirectory[0];
   volumeRoot[1] := ':';
@@ -1662,6 +1669,7 @@ begin
     '  /n (use network drive)\t\t\t Show device as network device.\n' +
     '  /m (use removable drive)\t\t\t Show device as removable media.\n' +
     '  /w (write-protect drive)\t\t\t Read only filesystem.\n' +
+    '  /b (case sensitive drive)\t\t\t Supports case-sensitive file names.\n'+
     '  /o (use mount manager)\t\t\t Register device to Windows mount manager.\n\t\t\t\t\t\t This enables advanced Windows features like recycle bin and more...\n' +
     '  /c (mount for current session only)\t\t Device only visible for current user session.\n' +
     '  /u (UNC provider name ex. \\localhost\\myfs)\t UNC name used for network volume.\n' +
@@ -1669,7 +1677,10 @@ begin
     '  /a Allocation unit size (ex. /a 512)\t\t Allocation Unit Size of the volume. This will behave on the disk file size.\n' +
     '  /k Sector size (ex. /k 512)\t\t\t Sector Size of the volume. This will behave on the disk file size.\n' +
     '  /f User mode Lock\t\t\t\t Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it.\n' +
+    '  /e Disable OpLocks\t\t\t\t Disable OpLocks kernel operations. Otherwise Dokan will take care of it.\n'+
     '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
+    '  /z Enabled FCB GC. Might speed up on env with filter drivers (Anti-virus) slowing down the system.\n'+
+    '  /x (network unmount)\t\t\t Allows unmounting network drive from file explorer\n'+
     'Examples:\n' +
     '\tmirror.exe /r C:\\Users /l M:\t\t\t# Mirror C:\\Users as RootDirectory into a drive of letter M:\\.\n' +
     '\tmirror.exe /r C:\\Users /l C:\\mount\\dokan\t# Mirror C:\\Users as RootDirectory into NTFS folder C:\\mount\\dokan.\n' +
@@ -1703,6 +1714,7 @@ begin
 
   g_DebugMode := False;
   g_UseStdErr := False;
+  g_CaseSensitive := False;
 
   ZeroMemory(dokanOptions, SizeOf(DOKAN_OPTIONS));
   dokanOptions^.Version := DOKAN_VERSION;
@@ -1711,11 +1723,6 @@ begin
   command := 1;
   while (command < argc) do begin
     case (UpCase(argv[command][2])) of
-      'R': begin
-        Inc(command);
-        lstrcpynW(RootDirectory, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
-        DbgPrint('RootDirectory: %s\n', [RootDirectory]);
-      end;
       'L': begin
         Inc(command);
         lstrcpynW(MountPoint, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
@@ -1749,6 +1756,19 @@ begin
       'F': begin
         dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_FILELOCK_USER_MODE;
       end;
+      'E': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_DISABLE_OPLOCKS;
+      end;
+      'Z': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_ENABLE_FCB_GARBAGE_COLLECTION;
+      end;
+      'X': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_ENABLE_UNMOUNT_NETWORK_DRIVE;
+      end;
+      'B': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_CASE_SENSITIVE;
+        g_CaseSensitive := true;
+      end;
       'U': begin
         Inc(command);
         lstrcpynW(UNCName, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
@@ -1769,6 +1789,11 @@ begin
       'K': begin
         Inc(command);
         dokanOptions^.SectorSize := StrToInt(argv[command]);
+      end;
+      'R': begin
+        Inc(command);
+        lstrcpynW(RootDirectory, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
+        DbgPrint('RootDirectory: %s\n', [RootDirectory]);
       end;
     else
       Writeln(ErrOutput, 'unknown command: ', argv[command]);

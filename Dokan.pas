@@ -41,8 +41,8 @@ uses
 const
   DokanLibrary = 'dokan1.dll';
 
-  //The current Dokan version (ver 1.4.0)
-  DOKAN_VERSION = 140;
+  //The current Dokan version (140 means ver 1.4.0).
+  DOKAN_VERSION = 141;
   //Minimum Dokan version (ver 1.1.0) accepted
   DOKAN_MINIMUM_COMPATIBLE_VERSION = 110;
 
@@ -59,6 +59,9 @@ const
   //Use network drive - Dokan network provider needs to be installed
   DOKAN_OPTION_NETWORK = 16;
   //Use removable drive
+  //Be aware that on some environments, the userland application will be denied
+  //to communicate with the drive which will result in a unwanted unmount.
+  //see <a href="https://github.com/dokan-dev/dokany/issues/843">Issue #843</a>
   DOKAN_OPTION_REMOVABLE = 32;
   //Use mount manager
   DOKAN_OPTION_MOUNT_MANAGER = 64;
@@ -77,6 +80,13 @@ const
   //from exponentially slowing down procedures like zip file extraction due to
   //repeatedly rebuilding state that they attach to the FCB header.
   DOKAN_OPTION_ENABLE_FCB_GARBAGE_COLLECTION = 2048;
+  //Enable Case sensitive path.
+  //By default all path are case insensitive.
+  //For case sensitive: \dir\File & \diR\file are different files
+  //but for case insensitive they are the same.
+  DOKAN_OPTION_CASE_SENSITIVE = 4096;
+  //Allows unmounting of network drive via explorer */
+  DOKAN_OPTION_ENABLE_UNMOUNT_NETWORK_DRIVE = 8192;
 
 type
   //Dokan mount options used to describe Dokan device behavior.
@@ -87,7 +97,7 @@ type
     GlobalContext: ULONG64;   //FileSystem can store anything here.
     MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or a folder path "C:\mount\dokan" on a NTFS partition.
     UNCName: LPCWSTR;         //UNC Name for the Network Redirector
-    Timeout: ULONG;           //Max timeout in milliseconds of each request before Dokan gives up to wait events to complete.
+    Timeout: ULONG;           //Max timeout in milliseconds of each request before Dokan gives up to wait events to complete. The default timeout value is 15 seconds.
     AllocationUnitSize: ULONG;//Allocation Unit Size of the volume. This will affect the file size.
     SectorSize: ULONG;        //Sector Size of the volume. This will affect the file size.
   end;

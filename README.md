@@ -15,9 +15,13 @@ Delphi/FreePascal and Dokan library
 ## Supported Dokan Version
 https://github.com/dokan-dev/dokany
 
-1.4.1.1000
+2.0.6.1000
 
-https://github.com/dokan-dev/dokany/releases/tag/v1.4.1.1000
+https://github.com/dokan-dev/dokany/releases/tag/v2.0.6.1000
+
+## Update Dokan 1.1.0 application to Dokany 2.x.x
+
+https://github.com/dokan-dev/dokany/wiki/Update-Dokan-1.1.0-application-to-Dokany-2.0.0
 
 ## How to write a file system
 To make a file system, an application needs to implement IDokanOperations interface.

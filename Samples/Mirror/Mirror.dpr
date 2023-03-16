@@ -1,12 +1,12 @@
 (*
-  Dokan API wrapper for Delphi based on Release 1.4.0.1000
-  https://github.com/dokan-dev/dokany/releases/tag/v1.4.0.1000
-  Copyright (C) 2019 - 2020 Sven Harazim
+  Dokan API wrapper for Delphi based on Release 2.0.5.1000
+  https://github.com/dokan-dev/dokany/releases/tag/v2.0.5.1000
+  Copyright (C) 2019 - 2022 Sven Harazim
 
   Dokan : user-mode file system library for Windows
 
   Copyright (C) 2015 - 2019 Adrien J. <liryna.stark@gmail.com> and Maxime C. <maxime@islog.com>
-  Copyright (C) 2020 Google, Inc.
+  Copyright (C) 2020 - 2022 Google, Inc.
   Copyright (C) 2007 - 2011 Hiroki Asakawa <info@dokan-dev.net>
 
   http://dokan-dev.github.io
@@ -47,7 +47,6 @@ const
   LOCALE_NAME_SYSTEM_DEFAULT  = '!x-sys-default-locale';
 
 type
-  LPVOID = Pointer;
   size_t = NativeUInt;
 
   _TOKEN_USER = record
@@ -151,7 +150,7 @@ begin
     SetLength(Result, j - 1);
 end;
 
-//{$define WIN10_ENABLE_LONG_PATH}
+{$define WIN10_ENABLE_LONG_PATH}
 {$ifdef WIN10_ENABLE_LONG_PATH}
 //dirty but should be enough
 const
@@ -191,18 +190,19 @@ begin
 end;
 
 var
-  RootDirectory: WCHAR_PATH;
-  MountPoint: WCHAR_PATH;
-  UNCName: WCHAR_PATH;
+  gRootDirectory: WCHAR_PATH;
+  gMountPoint: WCHAR_PATH;
+  gUNCName: WCHAR_PATH;
+  gVolumeName: WCHAR_PATH;
 
 procedure GetFilePath(filePath: PWCHAR; numberOfElements: ULONG;
                       const FileName: LPCWSTR);
 var
   unclen: size_t;
 begin
-  lstrcpynW(filePath, RootDirectory, numberOfElements);
-  unclen := lstrlenW(UNCName);
-  if (unclen > 0) and (_wcsnicmp(FileName, UNCName, unclen) = 0) then begin
+  lstrcpynW(filePath, gRootDirectory, numberOfElements);
+  unclen := lstrlenW(gUNCName);
+  if (unclen > 0) and (_wcsnicmp(FileName, gUNCName, unclen) = 0) then begin
     if (_wcsnicmp(FileName + unclen, '.', 1) <> 0) then begin
       wcsncat_s(filePath, numberOfElements, FileName + unclen,
                 size_t(lstrlenW(FileName)) - unclen);
@@ -1491,7 +1491,7 @@ var
 begin
   fsFlags := 0;
 
-  lstrcpynW(VolumeNameBuffer, 'DOKAN', VolumeNameSize);
+  lstrcpynW(VolumeNameBuffer, gVolumeName, VolumeNameSize);
   if (@VolumeSerialNumber <> nil) then
     VolumeSerialNumber := $19831116;
   if (@MaximumComponentLength <> nil) then
@@ -1504,7 +1504,7 @@ begin
       FileSystemFlags := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES;
   end;
 
-  volumeRoot[0] := RootDirectory[0];
+  volumeRoot[0] := gRootDirectory[0];
   volumeRoot[1] := ':';
   volumeRoot[2] := '\';
   volumeRoot[3] := #0;
@@ -1544,8 +1544,6 @@ begin
   Result := STATUS_SUCCESS; Exit;
 end;
 
-(*
-//Uncomment for personalize disk space
 function MirrorDokanGetDiskFreeSpace(
     var FreeBytesAvailable: ULONGLONG; var TotalNumberOfBytes: ULONGLONG;
     var TotalNumberOfFreeBytes: ULONGLONG; var DokanFileInfo: DOKAN_FILE_INFO
@@ -1557,7 +1555,6 @@ begin
 
   Result := STATUS_SUCCESS; Exit;
 end;
-*)
 
 (**
  * Avoid #include <winternl.h> which as conflict with FILE_INFORMATION_CLASS
@@ -1586,13 +1583,14 @@ NTSYSCALLAPI NTSTATUS NTAPI NtQueryInformationFile(
  *)
 
 function MirrorFindStreams(FileName: LPCWSTR; FillFindStreamData: TDokanFillFindStreamData;
-                  var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                  var FindStreamContext: PVOID;var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   hFind: THandle;
   findData: WIN32_FIND_STREAM_DATA;
   error: DWORD;
-  count: Integer;
+  bufferFull: Boolean;
+  count : Integer;
 begin
   count := 0;
 
@@ -1608,16 +1606,29 @@ begin
     Result := DokanNtStatusFromWin32(error); Exit;
   end;
 
-  FillFindStreamData(findData, DokanFileInfo);
-  Inc(count);
-
-  while (FindNextStreamW(hFind, @findData) <> False) do begin
-    FillFindStreamData(findData, DokanFileInfo);
+  bufferFull := FillFindStreamData(findData, FindStreamContext);
+  if bufferFull then
+  begin
     Inc(count);
+    while (FindNextStreamW(hFind, @findData) <> False) do begin
+      bufferFull := FillFindStreamData(findData, FindStreamContext);
+      if not bufferFull then
+        break;
+      Inc(count);
+    end;
   end;
 
   error := GetLastError();
   Windows.FindClose(hFind);
+
+  if not bufferFull then
+  begin
+    DbgPrint('\tFindStreams returned %d\n\n entries in %s with ',
+             [STATUS_BUFFER_OVERFLOW,count, filePath]);
+    // https://msdn.microsoft.com/en-us/library/windows/hardware/ff540364(v=vs.85).aspx
+    Result := STATUS_BUFFER_OVERFLOW;
+    exit;
+  end;
 
   if (error <> ERROR_HANDLE_EOF) then begin
     DbgPrint('\tFindNextStreamW error. Error is %u\n\n', [error]);
@@ -1629,9 +1640,9 @@ begin
   Result := STATUS_SUCCESS; Exit;
 end;
 
-function MirrorMounted(var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+function MirrorMounted(var MountPoint: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
 begin
-  DbgPrint('Mounted\n');
+  DbgPrint('Mounted as %s\n',[MountPoint]);
   Result := STATUS_SUCCESS; Exit;
 end;
 
@@ -1650,7 +1661,7 @@ begin
     CTRL_LOGOFF_EVENT,
     CTRL_SHUTDOWN_EVENT: begin
       SetConsoleCtrlHandler(@CtrlHandler, False);
-      DokanRemoveMountPoint(MountPoint);
+      DokanRemoveMountPoint(gMountPoint);
       Result := True;
     end;
   else
@@ -1663,24 +1674,24 @@ begin
     Write(ErrOutput, escape_replace('mirror.exe\n' +
     '  /r RootDirectory (ex. /r c:\\test)\t\t Directory source to mirror.\n' +
     '  /l MountPoint (ex. /l m)\t\t\t Mount point. Can be M:\\ (drive letter) or empty NTFS folder C:\\mount\\dokan .\n' +
-    '  /t ThreadCount (ex. /t 5)\t\t\t Number of threads to be used internally by Dokan library.\n\t\t\t\t\t\t More threads will handle more event at the same time.\n' +
+    '  /t Single thread\t\t\t\t Only use a single thread to process events.\n\t\t\t\t\t\t This is highly not recommended as can easily create a bottleneck.\n' +
     '  /d (enable debug output)\t\t\t Enable debug output to an attached debugger.\n' +
     '  /s (use stderr for output)\t\t\t Enable debug output to stderr.\n' +
-    '  /n (use network drive)\t\t\t Show device as network device.\n' +
     '  /m (use removable drive)\t\t\t Show device as removable media.\n' +
     '  /w (write-protect drive)\t\t\t Read only filesystem.\n' +
     '  /b (case sensitive drive)\t\t\t Supports case-sensitive file names.\n'+
     '  /o (use mount manager)\t\t\t Register device to Windows mount manager.\n\t\t\t\t\t\t This enables advanced Windows features like recycle bin and more...\n' +
     '  /c (mount for current session only)\t\t Device only visible for current user session.\n' +
-    '  /u (UNC provider name ex. \\localhost\\myfs)\t UNC name used for network volume.\n' +
+    '  /n (Network drive with UNC name ex. \\myfs\\fs1) Show device as network device with a UNC name.\n' +
     '  /p (Impersonate Caller User)\t\t\t Impersonate Caller User when getting the handle in CreateFile for operations.\n\t\t\t\t\t\t This option requires administrator right to work properly.\n' +
     '  /a Allocation unit size (ex. /a 512)\t\t Allocation Unit Size of the volume. This will behave on the disk file size.\n' +
     '  /k Sector size (ex. /k 512)\t\t\t Sector Size of the volume. This will behave on the disk file size.\n' +
     '  /f User mode Lock\t\t\t\t Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it.\n' +
-    '  /e Disable OpLocks\t\t\t\t Disable OpLocks kernel operations. Otherwise Dokan will take care of it.\n'+
-    '  /i (Timeout in Milliseconds ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n\n' +
-    '  /z Enabled FCB GC. Might speed up on env with filter drivers (Anti-virus) slowing down the system.\n'+
-    '  /x (network unmount)\t\t\t Allows unmounting network drive from file explorer\n'+
+    '  /i Timeout in Milliseconds (ex. /i 30000)\t Timeout until a running operation is aborted and the device is unmounted.\n' +
+    '  /z Enabled FCB GCt\t\t\t\t Might speed up on env with filter drivers (Anti-virus) slowing down the system.\n' +
+    '  /x Network unmount\t\t\t\t Allows unmounting network drive from file explorer.\n' +
+    '  /e Enable Driver Logs\t\t\t\t Forward Driver logs to userland.\n' +
+    '  /v Volume name\t\t\t\t Personalize the volume name.\n\n' +
     'Examples:\n' +
     '\tmirror.exe /r C:\\Users /l M:\t\t\t# Mirror C:\\Users as RootDirectory into a drive of letter M:\\.\n' +
     '\tmirror.exe /r C:\\Users /l C:\\mount\\dokan\t# Mirror C:\\Users as RootDirectory into NTFS folder C:\\mount\\dokan.\n' +
@@ -1718,28 +1729,28 @@ begin
 
   ZeroMemory(dokanOptions, SizeOf(DOKAN_OPTIONS));
   dokanOptions^.Version := DOKAN_VERSION;
-  dokanOptions^.ThreadCount := 0; // use default
 
   command := 1;
   while (command < argc) do begin
     case (UpCase(argv[command][2])) of
+      'R': begin
+        Inc(command);
+        lstrcpynW(gRootDirectory, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
+        DbgPrint('RootDirectory: %s\n', [gRootDirectory]);
+      end;
       'L': begin
         Inc(command);
-        lstrcpynW(MountPoint, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
-        dokanOptions^.MountPoint := MountPoint;
+        lstrcpynW(gMountPoint, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
+        dokanOptions^.MountPoint := gMountPoint;
       end;
       'T': begin
-        Inc(command);
-        dokanOptions^.ThreadCount := StrToInt(argv[command]);
+        dokanOptions^.SingleThread := true;
       end;
       'D': begin
         g_DebugMode := True;
       end;
       'S': begin
         g_UseStdErr := True;
-      end;
-      'N': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_NETWORK;
       end;
       'M': begin
         dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_REMOVABLE;
@@ -1756,24 +1767,27 @@ begin
       'F': begin
         dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_FILELOCK_USER_MODE;
       end;
-      'E': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_DISABLE_OPLOCKS;
-      end;
-      'Z': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_ENABLE_FCB_GARBAGE_COLLECTION;
-      end;
       'X': begin
         dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_ENABLE_UNMOUNT_NETWORK_DRIVE;
+      end;
+      'E': begin
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_DISPATCH_DRIVER_LOGS;
       end;
       'B': begin
         dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_CASE_SENSITIVE;
         g_CaseSensitive := true;
       end;
-      'U': begin
+      'N': begin
         Inc(command);
-        lstrcpynW(UNCName, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
-        dokanOptions^.UNCName := UNCName;
-        DbgPrint('UNC Name: %s\n', [UNCName]);
+        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_NETWORK;
+        lstrcpynW(gUNCName, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
+        dokanOptions^.UNCName := gUNCName;
+        DbgPrint('UNC Name: %s\n', [gUNCName]);
+      end;
+      'V': begin
+        Inc(command);
+        lstrcpynW(gVolumeName, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
+        DbgPrint('Volume Name: %s\n', [gVolumeName]);
       end;
       'P': begin
         g_ImpersonateCallerUser := True;
@@ -1790,11 +1804,6 @@ begin
         Inc(command);
         dokanOptions^.SectorSize := StrToInt(argv[command]);
       end;
-      'R': begin
-        Inc(command);
-        lstrcpynW(RootDirectory, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
-        DbgPrint('RootDirectory: %s\n', [RootDirectory]);
-      end;
     else
       Writeln(ErrOutput, 'unknown command: ', argv[command]);
       Dispose(dokanOperations);
@@ -1804,7 +1813,7 @@ begin
     Inc(command);
   end;
 
-  if (UNCName <> '') and
+  if (gUNCName <> '') and
       (dokanOptions^.Options and DOKAN_OPTION_NETWORK = 0) then begin
     Writeln(
         ErrOutput,
@@ -1820,7 +1829,7 @@ begin
   end;
 
   if (dokanOptions^.Options and DOKAN_OPTION_MOUNT_MANAGER = 0) and
-     (MountPoint = '') then begin
+     (gMountPoint = '') then begin
     Writeln(ErrOutput, 'Mount Point required.');
     Dispose(dokanOperations);
     Dispose(dokanOptions);
@@ -1889,13 +1898,15 @@ begin
   dokanOperations^.UnlockFile := MirrorUnlockFile;
   dokanOperations^.GetFileSecurity := MirrorGetFileSecurity;
   dokanOperations^.SetFileSecurity := MirrorSetFileSecurity;
-  dokanOperations^.GetDiskFreeSpace := nil; // MirrorDokanGetDiskFreeSpace;
+  dokanOperations^.GetDiskFreeSpace := MirrorDokanGetDiskFreeSpace;
   dokanOperations^.GetVolumeInformation := MirrorGetVolumeInformation;
   dokanOperations^.Unmounted := MirrorUnmounted;
   dokanOperations^.FindStreams := MirrorFindStreams;
   dokanOperations^.Mounted := MirrorMounted;
 
+  DokanInit;
   status := DokanMain(dokanOptions^, dokanOperations^);
+  DokanShutdown;
   case (status) of
     DOKAN_SUCCESS:
       Writeln(ErrOutput, 'Success');
@@ -1919,6 +1930,7 @@ begin
 
   Dispose(dokanOptions);
   Dispose(dokanOperations);
+  Readln;
   Result := EXIT_SUCCESS; Exit;
 end;
 
@@ -1930,9 +1942,10 @@ var
 begin
   IsMultiThread := True;
 
-  lstrcpyW(RootDirectory, 'C:');
-  lstrcpyW(MountPoint, 'M:\');
-  lstrcpyW(UNCName, '');
+  lstrcpyW(gRootDirectory, 'C:');
+  lstrcpyW(gMountPoint, 'M:\');
+  lstrcpyW(gUNCName, '');
+  lstrcpyW(gVolumeName, 'DOKAN');
 
   argc := 1 + ParamCount();
   SetLength(argv, argc);

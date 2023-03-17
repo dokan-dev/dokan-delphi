@@ -26,6 +26,8 @@
 
 unit Dokan;
 
+{.$DEFINE DOKAN_EXPLICIT_LINK}
+
 {$ifdef FPC}
   {$mode delphi}
 {$endif FPC}
@@ -42,7 +44,7 @@ const
   DokanLibrary = 'dokan2.dll';
 
   //The current Dokan version (200 means ver 2.0.0).
-  DOKAN_VERSION = 206;
+  DOKAN_VERSION = 200;
   //Minimum Dokan version (ver 2.0.0) accepted
   DOKAN_MINIMUM_COMPATIBLE_VERSION = 200;
 
@@ -99,7 +101,7 @@ type
     AllocationUnitSize: ULONG;//Allocation Unit Size of the volume. This will affect the file size.
     SectorSize: ULONG;        //Sector Size of the volume. This will affect the file size.
     VolumeSecurityDescriptorLength : ULONG; //Length of the optional VolumeSecurityDescriptor provided. Set 0 will disable the option.
-    VolumeSecurityDescriptor : array [0..VOLUME_SECURITY_DESCRIPTOR_MAX_SIZE-1] of WChar;//Optional Volume Security descriptor. See <a href="https://docs.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-initializesecuritydescriptor">InitializeSecurityDescriptor</a>
+    VolumeSecurityDescriptor : array [0..VOLUME_SECURITY_DESCRIPTOR_MAX_SIZE-1] of AnsiChar;//Optional Volume Security descriptor. See <a href="https://docs.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-initializesecuritydescriptor">InitializeSecurityDescriptor</a>
   end;
   DOKAN_OPTIONS = _DOKAN_OPTIONS;
   PDOKAN_OPTIONS = ^_DOKAN_OPTIONS;
@@ -401,20 +403,11 @@ const
 
 {$ifdef DOKAN_EXPLICIT_LINK}
 
-
-DokanDebugMode	0x0000000180004d30	0x00004d30	3 (0x3)	dokan2.dll	C:\Windows\System32\dokan2.dll	Exported Function
-DokanNetworkProviderInstall	0x000000018000d2c0	0x0000d2c0	11 (0xb)	dokan2.dll	C:\Windows\System32\dokan2.dll	Exported Function
-DokanNetworkProviderUninstall	0x000000018000d540	0x0000d540	12 (0xc)	dokan2.dll	C:\Windows\System32\dokan2.dll	Exported Function
-DokanServiceDelete	0x000000018000d170	0x0000d170	23 (0x17)	dokan2.dll	C:\Windows\System32\dokan2.dll	Exported Function
-DokanServiceInstall	0x000000018000d030	0x0000d030	24 (0x18)	dokan2.dll	C:\Windows\System32\dokan2.dll	Exported Function
-DokanSetDebugMode	0x0000000180008000	0x00008000	25 (0x19)	dokan2.dll	C:\Windows\System32\dokan2.dll	Exported Function
-DokanUseStdErr	0x0000000180004d20	0x00004d20	28 (0x1c)	dokan2.dll	C:\Windows\System32\dokan2.dll	Exported Function
-
 var
   DokanLibHandle: HMODULE = 0;
   DokanInit: procedure; stdcall = nil;
-  DokanShutdown procedure; stdcall = nil;
-  DokanMain: function (var Options: DOKAN_OPTIONS; var Operations: DOKAN_OPERATIONS): Integer; stdcall = nil;
+  DokanShutdown: procedure; stdcall = nil;
+  DokanMain: function (Options: DOKAN_OPTIONS; Operations: DOKAN_OPERATIONS): Integer; stdcall = nil;
   DokanCreateFileSystem: function (DokanOptions : DOKAN_OPTIONS; DokanOperations : DOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall = nil;
   DokanIsFileSystemRunning: function (DokanInstance : DOKAN_HANDLE) : BOOL; stdcall = nil;
   DokanWaitForFileSystemClosed: function (DokanInstance : DOKAN_HANDLE; dwMilliseconds : DWORD) : DWORD; stdcall = nil;
@@ -426,13 +419,13 @@ var
   DokanDriverVersion: function (): ULONG; stdcall = nil;
   DokanResetTimeout: function (Timeout: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): BOOL; stdcall = nil;
   DokanOpenRequestorToken: function (var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall = nil;
-  DokanGetMountPointList: function (uncOnly: BOOL; var nbRead: ULONG): PDOKAN_CONTROL; stdcall = nil;
-  DokanReleaseMountPointList: procedure (list: PDOKAN_CONTROL); stdcall = nil;
+  DokanGetMountPointList: function (uncOnly: BOOL; var nbRead: ULONG): PDOKAN_MOUNT_POINT_INFO; stdcall = nil;
+  DokanReleaseMountPointList: procedure (list: PDOKAN_MOUNT_POINT_INFO); stdcall = nil;
   DokanMapKernelToUserCreateFileFlags: procedure (DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions,
     CreateDisposition: ULONG;outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags,
     outCreationDisposition: PDWORD); stdcall = nil;
   DokanNotifyCreate: function (FilePath: LPCWSTR; IsDirectory : BOOL) : BOOL; stdcall = nil;
-  DokanNotifyDelete: function (FilePath : LPCWSTR; BOOL IsDirectory) : BOOL; stdcall = nil;
+  DokanNotifyDelete: function (DokanInstance : DOKAN_HANDLE; FilePath : LPCWSTR; IsDirectory : BOOL) : BOOL; stdcall = nil;
   DokanNotifyUpdate: function (FilePath : LPCWSTR) : BOOL; stdcall = nil;
   DokanNotifyXAttrUpdate: function (FilePath : LPCWSTR) : BOOL; stdcall = nil;
   DokanNotifyRename: function (OldPath: LPCWSTR; NewPath : LPCWSTR; IsDirectory : BOOL;
@@ -532,7 +525,7 @@ begin
   if DokanLibHandle = 0 then
     Exit;
 
-  DokanInit := nil
+  DokanInit := nil;
   DokanShutdown := nil;
   DokanMain := nil;
   DokanCreateFileSystem := nil;

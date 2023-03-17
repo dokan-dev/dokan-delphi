@@ -161,7 +161,7 @@ const
 {$endif} // DEBUG
 
 type
-  WCHAR_PATH = array [0 .. DOKAN_MAX_PATH-1] of WCHAR;
+  WCHAR_PATH = array [0..DOKAN_MAX_PATH-1] of WCHAR;
 
 var
   g_UseStdErr: Boolean;
@@ -271,7 +271,7 @@ begin
   token := 0;
   DbgPrint(
       '## Attempting to add SE_SECURITY_NAME privilege to process token ##\n');
-  if (not LookupPrivilegeValueW(nil, 'SeSecurityPrivilege', luid)) then begin
+  if (not LookupPrivilegeValueW(nil, SE_SECURITY_NAME, luid)) then begin
     err := GetLastError();
     if (err <> ERROR_SUCCESS) then begin
       DbgPrint('  failed: Unable to lookup privilege value. error = %u\n',
@@ -1729,6 +1729,16 @@ begin
 
   ZeroMemory(dokanOptions, SizeOf(DOKAN_OPTIONS));
   dokanOptions^.Version := DOKAN_VERSION;
+  dokanOptions^.SingleThread:= false;
+  dokanOptions^.Options:= 0;
+  //dokanOptions^.GlobalContext: ULONG64;   //FileSystem can store anything here.
+  //dokanOptions^.MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or a folder path "C:\mount\dokan" on a NTFS partition.
+  //dokanOptions^.UNCName: LPCWSTR;         //UNC Name for the Network Redirector
+  dokanOptions^.Timeout:= 15;//
+  //dokanOptions^.AllocationUnitSize: ULONG;//Allocation Unit Size of the volume. This will affect the file size.
+  //dokanOptions^.SectorSize: ULONG;        //Sector Size of the volume. This will affect the file size.
+  dokanOptions^.VolumeSecurityDescriptorLength := 0;
+  //dokanOptions^.VolumeSecurityDescriptor : array [0..VOLUME_SECURITY_DESCRIPTOR_MAX_SIZE-1] of AnsiChar;//Optional Volume Security descriptor. See <a href="https://docs.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-initializesecuritydescriptor">InitializeSecurityDescriptor</a>
 
   command := 1;
   while (command < argc) do begin

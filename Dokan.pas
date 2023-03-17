@@ -439,8 +439,8 @@ procedure DokanFree();
 
 procedure DokanInit; stdcall;
 procedure DokanShutdown; stdcall;
-function DokanMain(Options: DOKAN_OPTIONS; Operations: DOKAN_OPERATIONS): Integer; stdcall;
-function DokanCreateFileSystem(DokanOptions : DOKAN_OPTIONS; DokanOperations : DOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall;
+function DokanMain(var Options: DOKAN_OPTIONS; var Operations: DOKAN_OPERATIONS): Integer; stdcall;
+function DokanCreateFileSystem(var DokanOptions : DOKAN_OPTIONS; var DokanOperations : DOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall;
 function DokanIsFileSystemRunning(DokanInstance : DOKAN_HANDLE) : BOOL; stdcall;
 function DokanWaitForFileSystemClosed(DokanInstance : DOKAN_HANDLE; dwMilliseconds : DWORD) : DWORD; stdcall;
 procedure DokanCloseHandle(DokanInstance : DOKAN_HANDLE); stdcall;

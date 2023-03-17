@@ -44,7 +44,7 @@ const
   DokanLibrary = 'dokan2.dll';
 
   //The current Dokan version (200 means ver 2.0.0).
-  DOKAN_VERSION = 200;
+  DOKAN_VERSION = 206;
   //Minimum Dokan version (ver 2.0.0) accepted
   DOKAN_MINIMUM_COMPATIBLE_VERSION = 200;
 

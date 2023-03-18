@@ -150,7 +150,7 @@ begin
     SetLength(Result, j - 1);
 end;
 
-{$define WIN10_ENABLE_LONG_PATH}
+{.$define WIN10_ENABLE_LONG_PATH}
 {$ifdef WIN10_ENABLE_LONG_PATH}
 //dirty but should be enough
 const
@@ -212,7 +212,7 @@ begin
   end;
 end;
 
-procedure PrintUserName(var DokanFileInfo: DOKAN_FILE_INFO);
+procedure PrintUserName(DokanFileInfo: PDOKAN_FILE_INFO);
 var
   handle: THandle;
   buffer: array [0 .. 1023] of UCHAR;
@@ -326,10 +326,10 @@ begin
     DbgPrint('\t%s\n', [flagname]);
 end;
 
-function MirrorCreateFile(FileName: LPCWSTR; var SecurityContext: DOKAN_IO_SECURITY_CONTEXT;
+function MirrorCreateFile(FileName: LPCWSTR; SecurityContext: PDOKAN_IO_SECURITY_CONTEXT;
                  DesiredAccess: ACCESS_MASK; FileAttributes: ULONG;
                  ShareAccess: ULONG; CreateDisposition: ULONG;
-                 CreateOptions: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                 CreateOptions: ULONG; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -347,7 +347,7 @@ begin
 
   securityAttrib.nLength := SizeOf(securityAttrib);
   securityAttrib.lpSecurityDescriptor :=
-      SecurityContext.AccessState.SecurityDescriptor;
+      SecurityContext^.AccessState.SecurityDescriptor;
   securityAttrib.bInheritHandle := False;
 
   DokanMapKernelToUserCreateFileFlags(
@@ -403,7 +403,7 @@ begin
   if (fileAttr <> INVALID_FILE_ATTRIBUTES) then begin
     if (fileAttr and FILE_ATTRIBUTE_DIRECTORY <> 0) then begin
       if (CreateOptions and FILE_NON_DIRECTORY_FILE = 0) then begin
-        DokanFileInfo.IsDirectory := True;
+        DokanFileInfo^.IsDirectory := true;
         // Needed by FindFirstFile to list files in it
         // TODO: use ReOpenFile in MirrorFindFiles to set share read temporary
         ShareAccess := ShareAccess or FILE_SHARE_READ;
@@ -478,7 +478,7 @@ begin
   end else
     userTokenHandle := INVALID_HANDLE_VALUE; //to prevent compiler-warning
 
-  if (DokanFileInfo.IsDirectory) then begin
+  if (DokanFileInfo^.IsDirectory) then begin
     // It is a create directory request
 
     if (creationDisposition = CREATE_NEW) or
@@ -543,7 +543,7 @@ begin
 
         status := DokanNtStatusFromWin32(error);
       end else begin
-        DokanFileInfo.Context :=
+        DokanFileInfo^.Context :=
             ULONG64(handle); // save the file handle in Context
 
         // Open succeed but we need to inform the driver
@@ -615,7 +615,7 @@ begin
         SetFileAttributesW(filePath, fileAttributesAndFlags or fileAttr);
       end;
 
-      DokanFileInfo.Context :=
+      DokanFileInfo^.Context :=
           ULONG64(handle); // save the file handle in Context
 
       if (creationDisposition = OPEN_ALWAYS) or
@@ -636,42 +636,42 @@ begin
 end;
 
 procedure MirrorCloseFile(FileName: LPCWSTR;
-                          var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
+                          DokanFileInfo: PDOKAN_FILE_INFO); stdcall;
 var
   filePath: WCHAR_PATH;
 begin
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
-  if (DokanFileInfo.Context <> 0) then begin
+  if (DokanFileInfo^.Context <> 0) then begin
     DbgPrint('CloseFile: %s\n', [filePath]);
     DbgPrint('\terror : not cleanuped file\n\n');
-    CloseHandle(THandle(DokanFileInfo.Context));
-    DokanFileInfo.Context := 0;
+    CloseHandle(THandle(DokanFileInfo^.Context));
+    DokanFileInfo^.Context := 0;
   end else begin
     DbgPrint('Close: %s\n\n', [filePath]);
   end;
 end;
 
 procedure MirrorCleanup(FileName: LPCWSTR;
-                        var DokanFileInfo: DOKAN_FILE_INFO); stdcall;
+                        DokanFileInfo: PDOKAN_FILE_INFO); stdcall;
 var
   filePath: WCHAR_PATH;
 begin
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
-  if (DokanFileInfo.Context <> 0) then begin
+  if (DokanFileInfo^.Context <> 0) then begin
     DbgPrint('Cleanup: %s\n\n', [filePath]);
-    CloseHandle(THandle(DokanFileInfo.Context));
-    DokanFileInfo.Context := 0;
+    CloseHandle(THandle(DokanFileInfo^.Context));
+    DokanFileInfo^.Context := 0;
   end else begin
     DbgPrint('Cleanup: %s\n\tinvalid handle\n\n', [filePath]);
   end;
 
-  if (DokanFileInfo.DeleteOnClose) then begin
+  if (DokanFileInfo^.DeleteOnClose) then begin
     // Should already be deleted by CloseHandle
     // if open with FILE_FLAG_DELETE_ON_CLOSE
     DbgPrint('\tDeleteOnClose\n');
-    if (DokanFileInfo.IsDirectory) then begin
+    if (DokanFileInfo^.IsDirectory) then begin
       DbgPrint('  DeleteDirectory ');
       if (not RemoveDirectoryW(filePath)) then begin
         DbgPrint('error code = %d\n\n', [GetLastError()]);
@@ -691,9 +691,9 @@ end;
 
 function MirrorReadFile(FileName: LPCWSTR; var Buffer;
                         BufferLength: DWORD;
-                        var ReadLength: DWORD;
+                        ReadLength: PDWORD;
                         Offset: LONGLONG;
-                        var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                        DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -702,7 +702,7 @@ var
   error: DWORD;
   distanceToMove: LARGE_INTEGER;
 begin
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   offset_ := ULONG(Offset);
   opened := False;
 
@@ -731,17 +731,17 @@ begin
     Result := DokanNtStatusFromWin32(error); Exit;
   end;
 
-  if (not ReadFile(handle, Buffer, BufferLength, ReadLength, nil)) then begin
+  if (not ReadFile(handle, Buffer, BufferLength, ReadLength^, nil)) then begin
     error := GetLastError();
     DbgPrint('\tread error = %u, buffer length = %d, read length = %d\n\n',
-             [error, BufferLength, ReadLength]);
+             [error, BufferLength, ReadLength^]);
     if (opened) then
       CloseHandle(handle);
     Result := DokanNtStatusFromWin32(error); Exit;
 
   end else begin
     DbgPrint('\tByte to read: %d, Byte read %d, offset %d\n\n', [BufferLength,
-             ReadLength, offset_]);
+             ReadLength^, offset_]);
   end;
 
   if (opened) then
@@ -752,9 +752,9 @@ end;
 
 function MirrorWriteFile(FileName: LPCWSTR; const Buffer;
                          NumberOfBytesToWrite: DWORD;
-                         var NumberOfBytesWritten: DWORD;
+                         NumberOfBytesWritten: PDWORD;
                          Offset: LONGLONG;
-                         var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                         DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -767,7 +767,7 @@ var
   bytes: UINT64;
   distanceToMove: LARGE_INTEGER;
 begin
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   opened := False;
 
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
@@ -800,7 +800,7 @@ begin
 
   fileSize := (UINT64(fileSizeHigh) shl 32) or fileSizeLow;
 
-  if (DokanFileInfo.WriteToEndOfFile) then begin
+  if (DokanFileInfo^.WriteToEndOfFile) then begin
     z.QuadPart := 0;
     if (not SetFilePointerEx(handle, z, nil, FILE_END)) then begin
       error := GetLastError();
@@ -811,9 +811,9 @@ begin
     end;
   end else begin
     // Paging IO cannot write after allocate file size.
-    if (DokanFileInfo.PagingIo) then begin
+    if (DokanFileInfo^.PagingIo) then begin
       if (UINT64(Offset) >= fileSize) then begin
-        NumberOfBytesWritten := 0;
+        NumberOfBytesWritten^ := 0;
         if (opened) then
           CloseHandle(handle);
         Result := STATUS_SUCCESS; Exit;
@@ -846,17 +846,17 @@ begin
     end;
   end;
 
-  if (not WriteFile(handle, Buffer, NumberOfBytesToWrite, NumberOfBytesWritten,
+  if (not WriteFile(handle, Buffer, NumberOfBytesToWrite, NumberOfBytesWritten^,
                  nil)) then begin
     error := GetLastError();
     DbgPrint('\twrite error = %u, buffer length = %d, write length = %d\n',
-             [error, NumberOfBytesToWrite, NumberOfBytesWritten]);
+             [error, NumberOfBytesToWrite, NumberOfBytesWritten^]);
     if (opened) then
       CloseHandle(handle);
     Result := DokanNtStatusFromWin32(error); Exit;
 
   end else begin
-    DbgPrint('\twrite %d, offset %d\n\n', [NumberOfBytesWritten, Offset]);
+    DbgPrint('\twrite %d, offset %d\n\n', [NumberOfBytesWritten^, Offset]);
   end;
 
   // close the file when it is reopened
@@ -866,13 +866,13 @@ begin
   Result := STATUS_SUCCESS; Exit;
 end;
 
-function MirrorFlushFileBuffers(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+function MirrorFlushFileBuffers(FileName: LPCWSTR; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
   error: DWORD;
 begin
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
 
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
@@ -893,8 +893,8 @@ begin
 end;
 
 function MirrorGetFileInformation(
-    FileName: LPCWSTR; var HandleFileInformation: BY_HANDLE_FILE_INFORMATION;
-    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+    FileName: LPCWSTR; HandleFileInformation: PByHandleFileInformation;
+    DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -903,7 +903,7 @@ var
   findHandle: THandle;
   opened: Boolean;
 begin
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   opened := False;
 
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
@@ -922,14 +922,14 @@ begin
     opened := True;
   end;
 
-  if (not GetFileInformationByHandle(handle, HandleFileInformation)) then begin
+  if (not GetFileInformationByHandle(handle, HandleFileInformation^)) then begin
     DbgPrint('\terror code = %d\n', [GetLastError()]);
 
     // FileName is a root directory
     // in this case, FindFirstFile can't get directory information
     if (lstrlenW(FileName) = 1) then begin
       DbgPrint('  root dir\n');
-      HandleFileInformation.dwFileAttributes := GetFileAttributesW(filePath);
+      HandleFileInformation^.dwFileAttributes := GetFileAttributesW(filePath);
 
     end else begin
       ZeroMemory(@find, SizeOf(WIN32_FIND_DATAW));
@@ -941,21 +941,21 @@ begin
           CloseHandle(handle);
         Result := DokanNtStatusFromWin32(error); Exit;
       end;
-      HandleFileInformation.dwFileAttributes := find.dwFileAttributes;
-      HandleFileInformation.ftCreationTime := find.ftCreationTime;
-      HandleFileInformation.ftLastAccessTime := find.ftLastAccessTime;
-      HandleFileInformation.ftLastWriteTime := find.ftLastWriteTime;
-      HandleFileInformation.nFileSizeHigh := find.nFileSizeHigh;
-      HandleFileInformation.nFileSizeLow := find.nFileSizeLow;
+      HandleFileInformation^.dwFileAttributes := find.dwFileAttributes;
+      HandleFileInformation^.ftCreationTime := find.ftCreationTime;
+      HandleFileInformation^.ftLastAccessTime := find.ftLastAccessTime;
+      HandleFileInformation^.ftLastWriteTime := find.ftLastWriteTime;
+      HandleFileInformation^.nFileSizeHigh := find.nFileSizeHigh;
+      HandleFileInformation^.nFileSizeLow := find.nFileSizeLow;
       DbgPrint('\tFindFiles OK, file size = %d\n', [find.nFileSizeLow]);
       Windows.FindClose(findHandle);
     end;
   end else begin
     DbgPrint('\tGetFileInformationByHandle success, file size = %d\n',
-             [HandleFileInformation.nFileSizeLow]);
+             [HandleFileInformation^.nFileSizeLow]);
   end;
 
-  DbgPrint('FILE ATTRIBUTE  = %d\n', [HandleFileInformation.dwFileAttributes]);
+  DbgPrint('FILE ATTRIBUTE  = %d\n', [HandleFileInformation^.dwFileAttributes]);
 
   if (opened) then
     CloseHandle(handle);
@@ -965,7 +965,7 @@ end;
 
 function MirrorFindFiles(FileName: LPCWSTR;
                 FillFindData: TDokanFillFindData; // function pointer
-                var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   fileLen: size_t;
@@ -1002,7 +1002,7 @@ begin
   repeat
     if (not rootFolder) or ((lstrcmpW(findData.cFileName, '.') <> 0) and
                         (lstrcmpW(findData.cFileName, '..') <> 0)) then
-      FillFindData(findData, DokanFileInfo);
+      FillFindData(@findData, DokanFileInfo);
     Inc(count);
   until( FindNextFileW(hFind, findData) = False);
 
@@ -1019,17 +1019,17 @@ begin
   Result := STATUS_SUCCESS; Exit;
 end;
 
-function MirrorDeleteFile(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+function MirrorDeleteFile(FileName: LPCWSTR; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
   dwAttrib: DWORD;
   fdi: FILE_DISPOSITION_INFO;
 begin
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
 
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
-  DbgPrint('DeleteFile %s - %d\n', [filePath, Byte(DokanFileInfo.DeleteOnClose)]);
+  DbgPrint('DeleteFile %s - %d\n', [filePath, Byte(DokanFileInfo^.DeleteOnClose)]);
 
   dwAttrib := GetFileAttributesW(filePath);
 
@@ -1039,7 +1039,7 @@ begin
   end;
 
   if (handle <> 0) and (handle <> INVALID_HANDLE_VALUE) then begin
-    fdi.DeleteFile := DokanFileInfo.DeleteOnClose;
+    fdi.DeleteFile := DokanFileInfo^.DeleteOnClose;
     if (not SetFileInformationByHandle(handle, FileDispositionInfo, @fdi,
                                     sizeof(FILE_DISPOSITION_INFO))) then begin
       Result := DokanNtStatusFromWin32(GetLastError()); Exit;
@@ -1049,7 +1049,7 @@ begin
   Result := STATUS_SUCCESS; Exit;
 end;
 
-function MirrorDeleteDirectory(FileName: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+function MirrorDeleteDirectory(FileName: LPCWSTR; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   hFind: THandle;
@@ -1061,9 +1061,9 @@ begin
   GetFilePath(filePath, DOKAN_MAX_PATH, FileName);
 
   DbgPrint('DeleteDirectory %s - %d\n', [filePath,
-           Byte(DokanFileInfo.DeleteOnClose)]);
+           Byte(DokanFileInfo^.DeleteOnClose)]);
 
-  if (not DokanFileInfo.DeleteOnClose) then begin
+  if (not DokanFileInfo^.DeleteOnClose) then begin
     //Dokan notify that the file is requested not to be deleted.
     Result := STATUS_SUCCESS; Exit;
   end;
@@ -1107,7 +1107,7 @@ end;
 
 function MirrorMoveFile(FileName: LPCWSTR; // existing file name
                NewFileName: LPCWSTR; ReplaceIfExisting: BOOL;
-               var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+               DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   newFilePath: WCHAR_PATH;
@@ -1122,7 +1122,7 @@ begin
   GetFilePath(newFilePath, DOKAN_MAX_PATH, NewFileName);
 
   DbgPrint('MoveFile %s -> %s\n\n', [filePath, newFilePath]);
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('\tinvalid handle\n\n');
     Result := STATUS_INVALID_HANDLE; Exit;
@@ -1168,7 +1168,7 @@ end;
 function MirrorLockFile(FileName: LPCWSTR;
                         ByteOffset: LONGLONG;
                         Length: LONGLONG;
-                        var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                        DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -1180,7 +1180,7 @@ begin
 
   DbgPrint('LockFile %s\n', [filePath]);
 
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('\tinvalid handle\n\n');
     Result := STATUS_INVALID_HANDLE; Exit;
@@ -1201,7 +1201,7 @@ begin
 end;
 
 function MirrorSetEndOfFile(
-    FileName: LPCWSTR; ByteOffset: LONGLONG; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+    FileName: LPCWSTR; ByteOffset: LONGLONG; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -1212,7 +1212,7 @@ begin
 
   DbgPrint('SetEndOfFile %s, %d\n', [filePath, ByteOffset]);
 
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('\tinvalid handle\n\n');
     Result := STATUS_INVALID_HANDLE; Exit;
@@ -1236,7 +1236,7 @@ begin
 end;
 
 function MirrorSetAllocationSize(
-    FileName: LPCWSTR; AllocSize: LONGLONG; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+    FileName: LPCWSTR; AllocSize: LONGLONG; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -1247,7 +1247,7 @@ begin
 
   DbgPrint('SetAllocationSize %s, %d\n', [filePath, AllocSize]);
 
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('\tinvalid handle\n\n');
     Result := STATUS_INVALID_HANDLE; Exit;
@@ -1278,7 +1278,7 @@ begin
 end;
 
 function MirrorSetFileAttributes(
-    FileName: LPCWSTR; FileAttributes: DWORD; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+    FileName: LPCWSTR; FileAttributes: DWORD; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   error: DWORD;
@@ -1307,7 +1307,7 @@ end;
 
 function MirrorSetFileTime(FileName: LPCWSTR; var CreationTime: FILETIME;
                   var LastAccessTime: FILETIME; var LastWriteTime: FILETIME;
-                  var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                  DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -1317,7 +1317,7 @@ begin
 
   DbgPrint('SetFileTime %s\n', [filePath]);
 
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
 
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('\tinvalid handle\n\n');
@@ -1335,7 +1335,7 @@ begin
 end;
 
 function MirrorUnlockFile(FileName: LPCWSTR; ByteOffset: LONGLONG; Length: LONGLONG;
-                 var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                 DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   handle: THandle;
@@ -1347,7 +1347,7 @@ begin
 
   DbgPrint('UnlockFile %s\n', [filePath]);
 
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('\tinvalid handle\n\n');
     Result := STATUS_INVALID_HANDLE; Exit;
@@ -1368,9 +1368,9 @@ begin
 end;
 
 function MirrorGetFileSecurity(
-    FileName: LPCWSTR; var SecurityInformation: SECURITY_INFORMATION;
+    FileName: LPCWSTR; SecurityInformation: PSECURITY_INFORMATION;
     SecurityDescriptor: PSECURITY_DESCRIPTOR; BufferLength: ULONG;
-    var LengthNeeded: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+    LengthNeeded: PULONG; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   requestingSaclInfo: Boolean;
@@ -1383,28 +1383,27 @@ begin
 
   DbgPrint('GetFileSecurity %s\n', [filePath]);
 
-  MirrorCheckFlag(SecurityInformation, FILE_SHARE_READ, 'FILE_SHARE_READ');
-  MirrorCheckFlag(SecurityInformation, OWNER_SECURITY_INFORMATION, 'OWNER_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, GROUP_SECURITY_INFORMATION, 'GROUP_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, DACL_SECURITY_INFORMATION, 'DACL_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, SACL_SECURITY_INFORMATION, 'SACL_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, LABEL_SECURITY_INFORMATION, 'LABEL_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, ATTRIBUTE_SECURITY_INFORMATION, 'ATTRIBUTE_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, SCOPE_SECURITY_INFORMATION, 'SCOPE_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation,
-                  PROCESS_TRUST_LABEL_SECURITY_INFORMATION, 'PROCESS_TRUST_LABEL_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, BACKUP_SECURITY_INFORMATION, 'BACKUP_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, PROTECTED_DACL_SECURITY_INFORMATION, 'PROTECTED_DACL_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, PROTECTED_SACL_SECURITY_INFORMATION, 'PROTECTED_SACL_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, UNPROTECTED_DACL_SECURITY_INFORMATION, 'UNPROTECTED_DACL_SECURITY_INFORMATION');
-  MirrorCheckFlag(SecurityInformation, UNPROTECTED_SACL_SECURITY_INFORMATION, 'UNPROTECTED_SACL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, FILE_SHARE_READ, 'FILE_SHARE_READ');
+  MirrorCheckFlag(SecurityInformation^, OWNER_SECURITY_INFORMATION, 'OWNER_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, GROUP_SECURITY_INFORMATION, 'GROUP_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, DACL_SECURITY_INFORMATION, 'DACL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, SACL_SECURITY_INFORMATION, 'SACL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, LABEL_SECURITY_INFORMATION, 'LABEL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, ATTRIBUTE_SECURITY_INFORMATION, 'ATTRIBUTE_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, SCOPE_SECURITY_INFORMATION, 'SCOPE_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, PROCESS_TRUST_LABEL_SECURITY_INFORMATION, 'PROCESS_TRUST_LABEL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, BACKUP_SECURITY_INFORMATION, 'BACKUP_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, PROTECTED_DACL_SECURITY_INFORMATION, 'PROTECTED_DACL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, PROTECTED_SACL_SECURITY_INFORMATION, 'PROTECTED_SACL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, UNPROTECTED_DACL_SECURITY_INFORMATION, 'UNPROTECTED_DACL_SECURITY_INFORMATION');
+  MirrorCheckFlag(SecurityInformation^, UNPROTECTED_SACL_SECURITY_INFORMATION, 'UNPROTECTED_SACL_SECURITY_INFORMATION');
 
-  requestingSaclInfo := ((SecurityInformation and SACL_SECURITY_INFORMATION <> 0) or
-                        (SecurityInformation and BACKUP_SECURITY_INFORMATION <> 0));
+  requestingSaclInfo := ((SecurityInformation^ and SACL_SECURITY_INFORMATION) <> 0) or
+                        ((SecurityInformation^ and BACKUP_SECURITY_INFORMATION) <> 0);
 
   if (not g_HasSeSecurityPrivilege) then begin
-    SecurityInformation := SecurityInformation and not SACL_SECURITY_INFORMATION;
-    SecurityInformation := SecurityInformation and not BACKUP_SECURITY_INFORMATION;
+    SecurityInformation^ := SecurityInformation^ and not SACL_SECURITY_INFORMATION;
+    SecurityInformation^ := SecurityInformation^ and not BACKUP_SECURITY_INFORMATION;
   end;
 
   DesiredAccess := READ_CONTROL;
@@ -1427,8 +1426,8 @@ begin
     Result := DokanNtStatusFromWin32(error); Exit;
   end;
 
-  if (not GetUserObjectSecurity(handle, SecurityInformation, SecurityDescriptor,
-                             BufferLength, LengthNeeded)) then begin
+  if (not GetUserObjectSecurity(handle, SecurityInformation^, SecurityDescriptor,
+                             BufferLength, LengthNeeded^)) then begin
     error := GetLastError();
     if (error = ERROR_INSUFFICIENT_BUFFER) then begin
       DbgPrint('  GetUserObjectSecurity error: ERROR_INSUFFICIENT_BUFFER\n');
@@ -1446,7 +1445,7 @@ begin
       GetSecurityDescriptorLength(SecurityDescriptor);
   DbgPrint('  GetUserObjectSecurity return true,  *LengthNeeded = ' +
            'securityDescriptorLength \n');
-  LengthNeeded := securityDescriptorLength;
+  LengthNeeded^ := securityDescriptorLength;
 
   CloseHandle(handle);
 
@@ -1454,9 +1453,9 @@ begin
 end;
 
 function MirrorSetFileSecurity(
-    FileName: LPCWSTR; var SecurityInformation: SECURITY_INFORMATION;
+    FileName: LPCWSTR; var SecurityInformation: PSECURITY_INFORMATION;
     SecurityDescriptor: PSECURITY_DESCRIPTOR; SecurityDescriptorLength: ULONG;
-    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+    DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   handle: THandle;
   filePath: WCHAR_PATH;
@@ -1466,13 +1465,13 @@ begin
 
   DbgPrint('SetFileSecurity %s\n', [filePath]);
 
-  handle := THandle(DokanFileInfo.Context);
+  handle := THandle(DokanFileInfo^.Context);
   if (handle = 0) or (handle = INVALID_HANDLE_VALUE) then begin
     DbgPrint('\tinvalid handle\n\n');
     Result := STATUS_INVALID_HANDLE; Exit;
   end;
 
-  if (not SetUserObjectSecurity(handle, SecurityInformation, SecurityDescriptor)) then begin
+  if (not SetUserObjectSecurity(handle, SecurityInformation^, SecurityDescriptor)) then begin
     error := GetLastError();
     DbgPrint('  SetUserObjectSecurity error: %d\n', [error]);
     Result := DokanNtStatusFromWin32(error); Exit;
@@ -1481,10 +1480,10 @@ begin
 end;
 
 function MirrorGetVolumeInformation(
-    VolumeNameBuffer: LPWSTR; VolumeNameSize: DWORD; var VolumeSerialNumber: DWORD;
-    var MaximumComponentLength: DWORD; var FileSystemFlags: DWORD;
+    VolumeNameBuffer: LPWSTR; VolumeNameSize: DWORD; VolumeSerialNumber: PDWORD;
+    MaximumComponentLength: PDWORD; FileSystemFlags: PDWORD;
     FileSystemNameBuffer: LPWSTR; FileSystemNameSize: DWORD;
-    var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+    DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   volumeRoot: array [0 .. 3] of WCHAR;
   fsFlags: DWORD;
@@ -1492,16 +1491,16 @@ begin
   fsFlags := 0;
 
   lstrcpynW(VolumeNameBuffer, gVolumeName, VolumeNameSize);
-  if (@VolumeSerialNumber <> nil) then
-    VolumeSerialNumber := $19831116;
-  if (@MaximumComponentLength <> nil) then
-    MaximumComponentLength := 255;
-  if (@FileSystemFlags <> nil) then
+  if (VolumeSerialNumber <> nil) then
+    VolumeSerialNumber^ := $19831116;
+  if (MaximumComponentLength <> nil) then
+    MaximumComponentLength^ := 255;
+  if (FileSystemFlags <> nil) then
   begin
-    FileSystemFlags := FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
+    FileSystemFlags^ := FILE_SUPPORTS_REMOTE_STORAGE or FILE_UNICODE_ON_DISK or
                      FILE_PERSISTENT_ACLS or FILE_NAMED_STREAMS;
     if (g_CaseSensitive) then
-      FileSystemFlags := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES;
+      FileSystemFlags^ := FILE_CASE_SENSITIVE_SEARCH or FILE_CASE_PRESERVED_NAMES;
   end;
 
   volumeRoot[0] := gRootDirectory[0];
@@ -1509,25 +1508,25 @@ begin
   volumeRoot[2] := '\';
   volumeRoot[3] := #0;
 
-  if (GetVolumeInformationW(@volumeRoot[0], nil, 0, nil, MaximumComponentLength,
+  if (GetVolumeInformationW(@volumeRoot[0], nil, 0, nil, MaximumComponentLength^,
                            fsFlags, FileSystemNameBuffer,
                            FileSystemNameSize)) then begin
 
-    if (@FileSystemFlags <> nil) then
-      FileSystemFlags := FileSystemFlags and fsFlags;
+    if (FileSystemFlags <> nil) then
+      FileSystemFlags^ := FileSystemFlags^ and fsFlags;
 
-    if (@MaximumComponentLength <> nil) then begin
+    if (MaximumComponentLength <> nil) then begin
       DbgPrint('GetVolumeInformation: max component length %u\n',
-               [MaximumComponentLength]);
+               [MaximumComponentLength^]);
     end;
-    if (@FileSystemNameBuffer <> nil) then begin
+    if (FileSystemNameBuffer <> nil) then begin
       DbgPrint('GetVolumeInformation: file system name %s\n',
-               [FileSystemNameBuffer]);
+               [FileSystemNameBuffer^]);
     end;
-    if (@FileSystemFlags <> nil) then begin
+    if (FileSystemFlags <> nil) then begin
       DbgPrint('GetVolumeInformation: got file system flags 0x%08x,' +
                ' returning 0x%08x\n',
-               [fsFlags, FileSystemFlags]);
+               [fsFlags, FileSystemFlags^]);
     end;
   end else begin
 
@@ -1545,13 +1544,13 @@ begin
 end;
 
 function MirrorDokanGetDiskFreeSpace(
-    var FreeBytesAvailable: ULONGLONG; var TotalNumberOfBytes: ULONGLONG;
-    var TotalNumberOfFreeBytes: ULONGLONG; var DokanFileInfo: DOKAN_FILE_INFO
+    FreeBytesAvailable: PULONGLONG; TotalNumberOfBytes: PULONGLONG;
+    TotalNumberOfFreeBytes: PULONGLONG; DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 begin
-  FreeBytesAvailable := (512 * 1024 * 1024);
-  TotalNumberOfBytes := 9223372036854775807;
-  TotalNumberOfFreeBytes := 9223372036854775807;
+  FreeBytesAvailable^ := (512 * 1024 * 1024);
+  TotalNumberOfBytes^ := 9223372036854775807;
+  TotalNumberOfFreeBytes^ := 9223372036854775807;
 
   Result := STATUS_SUCCESS; Exit;
 end;
@@ -1583,7 +1582,7 @@ NTSYSCALLAPI NTSTATUS NTAPI NtQueryInformationFile(
  *)
 
 function MirrorFindStreams(FileName: LPCWSTR; FillFindStreamData: TDokanFillFindStreamData;
-                  var FindStreamContext: PVOID;var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+                  FindStreamContext: PVOID;DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 var
   filePath: WCHAR_PATH;
   hFind: THandle;
@@ -1606,12 +1605,12 @@ begin
     Result := DokanNtStatusFromWin32(error); Exit;
   end;
 
-  bufferFull := FillFindStreamData(findData, FindStreamContext);
+  bufferFull := FillFindStreamData(@findData, FindStreamContext);
   if bufferFull then
   begin
     Inc(count);
     while (FindNextStreamW(hFind, @findData) <> False) do begin
-      bufferFull := FillFindStreamData(findData, FindStreamContext);
+      bufferFull := FillFindStreamData(@findData, FindStreamContext);
       if not bufferFull then
         break;
       Inc(count);
@@ -1640,13 +1639,13 @@ begin
   Result := STATUS_SUCCESS; Exit;
 end;
 
-function MirrorMounted(var MountPoint: LPCWSTR; var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+function MirrorMounted(MountPoint: LPCWSTR; DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 begin
   DbgPrint('Mounted as %s\n',[MountPoint]);
   Result := STATUS_SUCCESS; Exit;
 end;
 
-function MirrorUnmounted(var DokanFileInfo: DOKAN_FILE_INFO): NTSTATUS; stdcall;
+function MirrorUnmounted(DokanFileInfo: PDOKAN_FILE_INFO): NTSTATUS; stdcall;
 begin
   DbgPrint('Unmounted\n');
   Result := STATUS_SUCCESS; Exit;
@@ -1703,23 +1702,11 @@ function wmain(argc: ULONG; argv: array of string): Integer;
 var
   status: Integer;
   command: ULONG;
-  dokanOperations: PDOKAN_OPERATIONS;
-  dokanOptions: PDOKAN_OPTIONS;
+  dokanOperations: DOKAN_OPERATIONS;
+  dokanOptions: DOKAN_OPTIONS;
 begin
-  New(dokanOperations);
-  if (dokanOperations = nil) then begin
-    Result := EXIT_FAILURE; Exit;
-  end;
-  New(dokanOptions);
-  if (dokanOptions = nil) then begin
-    Dispose(dokanOperations);
-    Result := EXIT_FAILURE; Exit;
-  end;
-
   if (argc < 3) then begin
     ShowUsage();
-    Dispose(dokanOperations);
-    Dispose(dokanOptions);
     Result := EXIT_FAILURE; Exit;
   end;
 
@@ -1727,18 +1714,18 @@ begin
   g_UseStdErr := False;
   g_CaseSensitive := False;
 
-  ZeroMemory(dokanOptions, SizeOf(DOKAN_OPTIONS));
-  dokanOptions^.Version := DOKAN_VERSION;
-  dokanOptions^.SingleThread:= false;
-  dokanOptions^.Options:= 0;
-  //dokanOptions^.GlobalContext: ULONG64;   //FileSystem can store anything here.
-  //dokanOptions^.MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or a folder path "C:\mount\dokan" on a NTFS partition.
-  //dokanOptions^.UNCName: LPCWSTR;         //UNC Name for the Network Redirector
-  dokanOptions^.Timeout:= 15;//
-  //dokanOptions^.AllocationUnitSize: ULONG;//Allocation Unit Size of the volume. This will affect the file size.
-  //dokanOptions^.SectorSize: ULONG;        //Sector Size of the volume. This will affect the file size.
-  dokanOptions^.VolumeSecurityDescriptorLength := 0;
-  //dokanOptions^.VolumeSecurityDescriptor : array [0..VOLUME_SECURITY_DESCRIPTOR_MAX_SIZE-1] of AnsiChar;//Optional Volume Security descriptor. See <a href="https://docs.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-initializesecuritydescriptor">InitializeSecurityDescriptor</a>
+  ZeroMemory(@dokanOptions, SizeOf(DOKAN_OPTIONS));
+  dokanOptions.Version := DOKAN_VERSION;
+  dokanOptions.SingleThread:= false;
+  dokanOptions.Options:= 0;
+  //dokanOptions.GlobalContext: ULONG64;   //FileSystem can store anything here.
+  //dokanOptions.MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or a folder path "C:\mount\dokan" on a NTFS partition.
+  //dokanOptions.UNCName: LPCWSTR;         //UNC Name for the Network Redirector
+  dokanOptions.Timeout:= 15;//
+  //dokanOptions.AllocationUnitSize: ULONG;//Allocation Unit Size of the volume. This will affect the file size.
+  //dokanOptions.SectorSize: ULONG;        //Sector Size of the volume. This will affect the file size.
+  dokanOptions.VolumeSecurityDescriptorLength := 0;
+  //dokanOptions.VolumeSecurityDescriptor : array [0..VOLUME_SECURITY_DESCRIPTOR_MAX_SIZE-1] of AnsiChar;//Optional Volume Security descriptor. See <a href="https://docs.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-initializesecuritydescriptor">InitializeSecurityDescriptor</a>
 
   command := 1;
   while (command < argc) do begin
@@ -1751,10 +1738,10 @@ begin
       'L': begin
         Inc(command);
         lstrcpynW(gMountPoint, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
-        dokanOptions^.MountPoint := gMountPoint;
+        dokanOptions.MountPoint := gMountPoint;
       end;
       'T': begin
-        dokanOptions^.SingleThread := true;
+        dokanOptions.SingleThread := true;
       end;
       'D': begin
         g_DebugMode := True;
@@ -1763,35 +1750,35 @@ begin
         g_UseStdErr := True;
       end;
       'M': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_REMOVABLE;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_REMOVABLE;
       end;
       'W': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_WRITE_PROTECT;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_WRITE_PROTECT;
       end;
       'O': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_MOUNT_MANAGER;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_MOUNT_MANAGER;
       end;
       'C': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_CURRENT_SESSION;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_CURRENT_SESSION;
       end;
       'F': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_FILELOCK_USER_MODE;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_FILELOCK_USER_MODE;
       end;
       'X': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_ENABLE_UNMOUNT_NETWORK_DRIVE;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_ENABLE_UNMOUNT_NETWORK_DRIVE;
       end;
       'E': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_DISPATCH_DRIVER_LOGS;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_DISPATCH_DRIVER_LOGS;
       end;
       'B': begin
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_CASE_SENSITIVE;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_CASE_SENSITIVE;
         g_CaseSensitive := true;
       end;
       'N': begin
         Inc(command);
-        dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_NETWORK;
+        dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_NETWORK;
         lstrcpynW(gUNCName, PWideChar(WideString(argv[command])), DOKAN_MAX_PATH);
-        dokanOptions^.UNCName := gUNCName;
+        dokanOptions.UNCName := gUNCName;
         DbgPrint('UNC Name: %s\n', [gUNCName]);
       end;
       'V': begin
@@ -1804,54 +1791,46 @@ begin
       end;
       'I': begin
         Inc(command);
-        dokanOptions^.Timeout := StrToInt(argv[command]);
+        dokanOptions.Timeout := StrToInt(argv[command]);
       end;
       'A': begin
         Inc(command);
-        dokanOptions^.AllocationUnitSize := StrToInt(argv[command]);
+        dokanOptions.AllocationUnitSize := StrToInt(argv[command]);
       end;
       'K': begin
         Inc(command);
-        dokanOptions^.SectorSize := StrToInt(argv[command]);
+        dokanOptions.SectorSize := StrToInt(argv[command]);
       end;
     else
       Writeln(ErrOutput, 'unknown command: ', argv[command]);
-      Dispose(dokanOperations);
-      Dispose(dokanOptions);
       Result := EXIT_FAILURE; Exit;
     end;
     Inc(command);
   end;
 
   if (gUNCName <> '') and
-      (dokanOptions^.Options and DOKAN_OPTION_NETWORK = 0) then begin
+      (dokanOptions.Options and DOKAN_OPTION_NETWORK = 0) then begin
     Writeln(
         ErrOutput,
         '  Warning: UNC provider name should be set on network drive only.');
   end;
 
-  if (dokanOptions^.Options and DOKAN_OPTION_NETWORK <> 0) and
-     (dokanOptions^.Options and DOKAN_OPTION_MOUNT_MANAGER <> 0) then begin
+  if (dokanOptions.Options and DOKAN_OPTION_NETWORK <> 0) and
+     (dokanOptions.Options and DOKAN_OPTION_MOUNT_MANAGER <> 0) then begin
     Writeln(ErrOutput, 'Mount manager cannot be used on network drive.');
-    Dispose(dokanOperations);
-    Dispose(dokanOptions);
     Result := EXIT_FAILURE; Exit;
   end;
 
-  if (dokanOptions^.Options and DOKAN_OPTION_MOUNT_MANAGER = 0) and
+  if (dokanOptions.Options and DOKAN_OPTION_MOUNT_MANAGER = 0) and
      (gMountPoint = '') then begin
     Writeln(ErrOutput, 'Mount Point required.');
-    Dispose(dokanOperations);
-    Dispose(dokanOptions);
     Result := EXIT_FAILURE; Exit;
   end;
 
-  if (dokanOptions^.Options and DOKAN_OPTION_MOUNT_MANAGER <> 0) and
-     (dokanOptions^.Options and DOKAN_OPTION_CURRENT_SESSION <> 0) then begin
+  if (dokanOptions.Options and DOKAN_OPTION_MOUNT_MANAGER <> 0) and
+     (dokanOptions.Options and DOKAN_OPTION_CURRENT_SESSION <> 0) then begin
     Writeln(ErrOutput,
              'Mount Manager always mount the drive for all user sessions.');
-    Dispose(dokanOperations);
-    Dispose(dokanOptions);
     Result := EXIT_FAILURE; Exit;
   end;
 
@@ -1879,43 +1858,43 @@ begin
   end;
 
   if (g_DebugMode) then begin
-    dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_DEBUG;
+    dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_DEBUG;
   end;
   if (g_UseStdErr) then begin
-    dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_STDERR;
+    dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_STDERR;
   end;
 
-  dokanOptions^.Options := dokanOptions^.Options or DOKAN_OPTION_ALT_STREAM;
+  dokanOptions.Options := dokanOptions.Options or DOKAN_OPTION_ALT_STREAM;
 
-  ZeroMemory(dokanOperations, SizeOf(DOKAN_OPERATIONS));
-  dokanOperations^.ZwCreateFile := MirrorCreateFile;
-  dokanOperations^.Cleanup := MirrorCleanup;
-  dokanOperations^.CloseFile := MirrorCloseFile;
-  dokanOperations^.ReadFile := MirrorReadFile;
-  dokanOperations^.WriteFile := MirrorWriteFile;
-  dokanOperations^.FlushFileBuffers := MirrorFlushFileBuffers;
-  dokanOperations^.GetFileInformation := MirrorGetFileInformation;
-  dokanOperations^.FindFiles := MirrorFindFiles;
-  dokanOperations^.FindFilesWithPattern := nil;
-  dokanOperations^.SetFileAttributes := MirrorSetFileAttributes;
-  dokanOperations^.SetFileTime := MirrorSetFileTime;
-  dokanOperations^.DeleteFile := MirrorDeleteFile;
-  dokanOperations^.DeleteDirectory := MirrorDeleteDirectory;
-  dokanOperations^.MoveFile := MirrorMoveFile;
-  dokanOperations^.SetEndOfFile := MirrorSetEndOfFile;
-  dokanOperations^.SetAllocationSize := MirrorSetAllocationSize;
-  dokanOperations^.LockFile := MirrorLockFile;
-  dokanOperations^.UnlockFile := MirrorUnlockFile;
-  dokanOperations^.GetFileSecurity := MirrorGetFileSecurity;
-  dokanOperations^.SetFileSecurity := MirrorSetFileSecurity;
-  dokanOperations^.GetDiskFreeSpace := MirrorDokanGetDiskFreeSpace;
-  dokanOperations^.GetVolumeInformation := MirrorGetVolumeInformation;
-  dokanOperations^.Unmounted := MirrorUnmounted;
-  dokanOperations^.FindStreams := MirrorFindStreams;
-  dokanOperations^.Mounted := MirrorMounted;
+  ZeroMemory(@dokanOperations, SizeOf(DOKAN_OPERATIONS));
+  dokanOperations.ZwCreateFile := MirrorCreateFile;
+  dokanOperations.Cleanup := MirrorCleanup;
+  dokanOperations.CloseFile := MirrorCloseFile;
+  dokanOperations.ReadFile := MirrorReadFile;
+  dokanOperations.WriteFile := MirrorWriteFile;
+  dokanOperations.FlushFileBuffers := MirrorFlushFileBuffers;
+  dokanOperations.GetFileInformation := MirrorGetFileInformation;
+  dokanOperations.FindFiles := MirrorFindFiles;
+  dokanOperations.FindFilesWithPattern := nil;
+  dokanOperations.SetFileAttributes := MirrorSetFileAttributes;
+  dokanOperations.SetFileTime := MirrorSetFileTime;
+  dokanOperations.DeleteFile := MirrorDeleteFile;
+  dokanOperations.DeleteDirectory := MirrorDeleteDirectory;
+  dokanOperations.MoveFile := MirrorMoveFile;
+  dokanOperations.SetEndOfFile := MirrorSetEndOfFile;
+  dokanOperations.SetAllocationSize := MirrorSetAllocationSize;
+  dokanOperations.LockFile := MirrorLockFile;
+  dokanOperations.UnlockFile := MirrorUnlockFile;
+  dokanOperations.GetFileSecurity := MirrorGetFileSecurity;
+  dokanOperations.SetFileSecurity := MirrorSetFileSecurity;
+  dokanOperations.GetDiskFreeSpace := MirrorDokanGetDiskFreeSpace;
+  dokanOperations.GetVolumeInformation := MirrorGetVolumeInformation;
+  dokanOperations.Unmounted := MirrorUnmounted;
+  dokanOperations.FindStreams := MirrorFindStreams;
+  dokanOperations.Mounted := MirrorMounted;
 
   DokanInit;
-  status := DokanMain(dokanOptions^, dokanOperations^);
+  status := DokanMain(@dokanOptions, @dokanOperations);
   DokanShutdown;
   case (status) of
     DOKAN_SUCCESS:
@@ -1938,8 +1917,6 @@ begin
     Writeln(ErrOutput, 'Unknown error: ', status);
   end;
 
-  Dispose(dokanOptions);
-  Dispose(dokanOperations);
   Readln;
   Result := EXIT_SUCCESS; Exit;
 end;

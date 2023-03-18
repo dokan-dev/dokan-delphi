@@ -92,7 +92,7 @@ type
   //Dokan mount options used to describe Dokan device behavior.
   _DOKAN_OPTIONS = record
     Version: USHORT;          //Version of the Dokan features requested without dots (version "123" is equal to Dokan version 1.2.3).
-    SingleThread: BOOL;       //Only use a single thread to process events. This is highly not recommended as can easily create a bottleneck.
+    SingleThread: ByteBool;       //Only use a single thread to process events. This is highly not recommended as can easily create a bottleneck.
     Options: ULONG;           //Features enabled for the mount. See \ref DOKAN_OPTION.
     GlobalContext: ULONG64;   //FileSystem can store anything here.
     MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or a folder path "C:\mount\dokan" on a NTFS partition.
@@ -136,15 +136,15 @@ type
   //FillFindData Used to add an entry in FindFiles operation
   //return 1 if buffer is full, otherwise 0 (currently it never returns 1)
   TDokanFillFindData = function (
-    var FindData: WIN32_FIND_DATAW;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    FindData: PWin32FindData;
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): Integer; stdcall;
 
   //FillFindStreamData Used to add an entry in FindStreams
   //return FALSE if the buffer is full, otherwise TRUE
   TDokanFillFindStreamData = function (
-    var FindStreamData: WIN32_FIND_STREAM_DATA;
-    var FindStreamContext: PVOID
+    FindStreamData: PWIN32_FIND_STREAM_DATA;
+    FindStreamContext: PVOID
   ): BOOL; stdcall;
 
   _DOKAN_ACCESS_STATE = record
@@ -176,71 +176,71 @@ type
 
   TDokanZwCreateFile = function (
     FileName: LPCWSTR;
-    var SecurityContext: DOKAN_IO_SECURITY_CONTEXT;
+    SecurityContext: PDOKAN_IO_SECURITY_CONTEXT;
     DesiredAccess: ACCESS_MASK;
     FileAttributes: ULONG;
     ShareAccess: ULONG;
     CreateDisposition: ULONG;
     CreateOptions: ULONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanCleanup = procedure (
     FileName: LPCWSTR;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ); stdcall;
 
   TDokanCloseFile = procedure (
     FileName: LPCWSTR;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ); stdcall;
 
   TDokanReadFile = function (
     FileName: LPCWSTR;
     var Buffer;
     BufferLength: DWORD;
-    var ReadLength: DWORD;
+    ReadLength: PDWORD;
     Offset: LONGLONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanWriteFile = function (
     FileName: LPCWSTR;
     const Buffer;
     NumberOfBytesToWrite: DWORD;
-    var NumberOfBytesWritten: DWORD;
+    NumberOfBytesWritten: PDWORD;
     Offset: LONGLONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanFlushFileBuffers = function (
     FileName: LPCWSTR;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanGetFileInformation = function (
     FileName: LPCWSTR;
-    var Buffer: BY_HANDLE_FILE_INFORMATION;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    Buffer: PByHandleFileInformation;
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanFindFiles = function (
     PathName: LPCWSTR;
     FillFindData: TDokanFillFindData;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanFindFilesWithPattern = function (
     PathName: LPCWSTR;
     SearchPattern: LPCWSTR;
     FillFindData: TDokanFillFindData;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanSetFileAttributes = function (
     FileName: LPCWSTR;
     FileAttributes: DWORD;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanSetFileTime = function (
@@ -248,101 +248,101 @@ type
     var CreationTime: FILETIME;
     var LastAccessTime: FILETIME;
     var LastWriteTime: FILETIME;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanDeleteFile = function (
     FileName: LPCWSTR;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanDeleteDirectory = function (
     FileName: LPCWSTR;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanMoveFile = function (
     FileName: LPCWSTR;
     NewFileName: LPCWSTR;
     ReplaceIfExisting: BOOL;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanSetEndOfFile = function (
     FileName: LPCWSTR;
     ByteOffset: LONGLONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanSetAllocationSize = function (
     FileName: LPCWSTR;
     AllocSize: LONGLONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanLockFile = function (
     FileName: LPCWSTR;
     ByteOffset: LONGLONG;
     Length: LONGLONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanUnlockFile = function (
     FileName: LPCWSTR;
     ByteOffset: LONGLONG;
     Length: LONGLONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanGetDiskFreeSpace = function (
-    var FreeBytesAvailable: ULONGLONG;
-    var TotalNumberOfBytes: ULONGLONG;
-    var TotalNumberOfFreeBytes: ULONGLONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    FreeBytesAvailable: PULONGLONG;
+    TotalNumberOfBytes: PULONGLONG;
+    TotalNumberOfFreeBytes: PULONGLONG;
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanGetVolumeInformation = function (
     VolumeNameBuffer: LPWSTR;
     VolumeNameSize: DWORD;
-    var VolumeSerialNumber: DWORD;
-    var MaximumComponentLength: DWORD;
-    var FileSystemFlags: DWORD;
+    VolumeSerialNumber: PDWORD;
+    MaximumComponentLength: PDWORD;
+    FileSystemFlags: PDWORD;
     FileSystemNameBuffer: LPWSTR;
     FileSystemNameSize: DWORD;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanMounted = function (
-    var MountPoint: LPCWSTR;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    MountPoint: LPCWSTR;
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanUnmounted = function (
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanGetFileSecurity = function (
     FileName: LPCWSTR;
-    var SecurityInformation: SECURITY_INFORMATION;
+    SecurityInformation: PSECURITY_INFORMATION;
     SecurityDescriptor: PSECURITY_DESCRIPTOR;
     BufferLength: ULONG;
-    var LengthNeeded: ULONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    LengthNeeded: PULONG;
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanSetFileSecurity = function (
     FileName: LPCWSTR;
-    var SecurityInformation: SECURITY_INFORMATION;
+    var SecurityInformation: PSECURITY_INFORMATION;
     SecurityDescriptor: PSECURITY_DESCRIPTOR;
     BufferLength: ULONG;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   TDokanFindStreams = function (
     FileName: LPCWSTR;
     FillFindStreamData: TDokanFillFindStreamData;
-    var FindStreamContext : PVOID;
-    var DokanFileInfo: DOKAN_FILE_INFO
+    FindStreamContext : PVOID;
+    DokanFileInfo: PDOKAN_FILE_INFO
   ): NTSTATUS; stdcall;
 
   _DOKAN_OPERATIONS = record
@@ -382,7 +382,6 @@ type
     MountPoint: array [0 .. MAX_PATH - 1] of WCHAR;
     UNCName: array [0 .. 63] of WCHAR;
     DeviceName: array [0 .. 63] of WCHAR;
-    DeviceObject: Pointer;
     SessionId : ULONG;
     MountOptions : ULONG;
   end;
@@ -417,8 +416,8 @@ var
   DokanIsNameInExpression: function (Expression, Name: LPCWSTR; IgnoreCase: BOOL): BOOL; stdcall = nil;
   DokanVersion: function (): ULONG; stdcall = nil;
   DokanDriverVersion: function (): ULONG; stdcall = nil;
-  DokanResetTimeout: function (Timeout: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): BOOL; stdcall = nil;
-  DokanOpenRequestorToken: function (var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall = nil;
+  DokanResetTimeout: function (Timeout: ULONG; DokanFileInfo: PDOKAN_FILE_INFO): BOOL; stdcall = nil;
+  DokanOpenRequestorToken: function (DokanFileInfo: PDOKAN_FILE_INFO): THandle; stdcall = nil;
   DokanGetMountPointList: function (uncOnly: BOOL; var nbRead: ULONG): PDOKAN_MOUNT_POINT_INFO; stdcall = nil;
   DokanReleaseMountPointList: procedure (list: PDOKAN_MOUNT_POINT_INFO); stdcall = nil;
   DokanMapKernelToUserCreateFileFlags: procedure (DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions,
@@ -439,8 +438,8 @@ procedure DokanFree();
 
 procedure DokanInit; stdcall;
 procedure DokanShutdown; stdcall;
-function DokanMain(var Options: DOKAN_OPTIONS; var Operations: DOKAN_OPERATIONS): Integer; stdcall;
-function DokanCreateFileSystem(var DokanOptions : DOKAN_OPTIONS; var DokanOperations : DOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall;
+function DokanMain(Options: PDOKAN_OPTIONS; Operations: PDOKAN_OPERATIONS): Integer; stdcall;
+function DokanCreateFileSystem(DokanOptions : PDOKAN_OPTIONS; DokanOperations : PDOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall;
 function DokanIsFileSystemRunning(DokanInstance : DOKAN_HANDLE) : BOOL; stdcall;
 function DokanWaitForFileSystemClosed(DokanInstance : DOKAN_HANDLE; dwMilliseconds : DWORD) : DWORD; stdcall;
 procedure DokanCloseHandle(DokanInstance : DOKAN_HANDLE); stdcall;
@@ -449,8 +448,8 @@ function DokanRemoveMountPoint(MountPoint: LPCWSTR): BOOL; stdcall;
 function DokanIsNameInExpression(Expression, Name: LPCWSTR; IgnoreCase: BOOL): BOOL; stdcall;
 function DokanVersion(): ULONG; stdcall;
 function DokanDriverVersion(): ULONG; stdcall;
-function DokanResetTimeout(Timeout: ULONG; var DokanFileInfo: DOKAN_FILE_INFO): BOOL; stdcall;
-function DokanOpenRequestorToken(var DokanFileInfo: DOKAN_FILE_INFO): THandle; stdcall;
+function DokanResetTimeout(Timeout: ULONG; DokanFileInfo: PDOKAN_FILE_INFO): BOOL; stdcall;
+function DokanOpenRequestorToken(DokanFileInfo: PDOKAN_FILE_INFO): THandle; stdcall;
 function DokanGetMountPointList(uncOnly: BOOL; var nbRead: ULONG): PDOKAN_MOUNT_POINT_INFO; stdcall;
 procedure DokanReleaseMountPointList(list: PDOKAN_MOUNT_POINT_INFO); stdcall;
 procedure DokanMapKernelToUserCreateFileFlags(DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions,

@@ -1,7 +1,7 @@
 (*
-  Dokan API wrapper for Delphi based on Release 1.4.1.1000
-  https://github.com/dokan-dev/dokany/releases/tag/v1.4.1.1000
-  Copyright (C) 2019 - 2021 Sven Harazim
+  Dokan API wrapper for Delphi based on Release 2.0.5.1000
+  https://github.com/dokan-dev/dokany/releases/tag/v2.0.5.1000
+  Copyright (C) 2019 - 2023 Sven Harazim
 
   Dokan : user-mode file system library for Windows
 
@@ -42,6 +42,9 @@ type
   USHORT = Word;
   ULONG64 = UInt64;
   PACCESS_MASK = ^ACCESS_MASK;
+
+  LPVOID = Pointer;
+  PVOID = Pointer;
 
   _UNICODE_STRING = record
     Length: USHORT;
@@ -266,6 +269,8 @@ const
   STATUS_NAME_TOO_LONG                      = NTSTATUS($C0000106);
   STATUS_CANNOT_DELETE                      = NTSTATUS($C0000121);
   STATUS_NOT_FOUND                          = NTSTATUS($C0000225);
+
+  VOLUME_SECURITY_DESCRIPTOR_MAX_SIZE = 1024 * 16;
 
 implementation
 

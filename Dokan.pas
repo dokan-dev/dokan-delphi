@@ -1,7 +1,7 @@
 (*
   Dokan API wrapper for Delphi based on Release 2.0.5.1000
   https://github.com/dokan-dev/dokany/releases/tag/v2.0.5.1000
-  Copyright (C) 2019 - 2022 Sven Harazim
+  Copyright (C) 2019 - 2023 Sven Harazim
 
   Dokan : user-mode file system library for Windows
 
@@ -332,7 +332,7 @@ type
 
   TDokanSetFileSecurity = function (
     FileName: LPCWSTR;
-    var SecurityInformation: PSECURITY_INFORMATION;
+    SecurityInformation: PSECURITY_INFORMATION;
     SecurityDescriptor: PSECURITY_DESCRIPTOR;
     BufferLength: ULONG;
     DokanFileInfo: PDOKAN_FILE_INFO

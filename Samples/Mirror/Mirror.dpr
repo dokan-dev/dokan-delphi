@@ -1,7 +1,7 @@
 (*
-  Dokan API wrapper for Delphi based on Release 2.0.5.1000
-  https://github.com/dokan-dev/dokany/releases/tag/v2.0.5.1000
-  Copyright (C) 2019 - 2023 Sven Harazim
+  Dokan API wrapper for Delphi based on Release 2.0.6.1000
+  https://github.com/dokan-dev/dokany/releases/tag/v2.0.6.1000
+  Copyright (C) 2019 - 2024 Sven Harazim
 
   Dokan : user-mode file system library for Windows
 
@@ -1894,9 +1894,11 @@ begin
   dokanOperations.FindStreams := MirrorFindStreams;
   dokanOperations.Mounted := MirrorMounted;
 
+  //if defined Dokan.pas DOKAN_EXPLICIT_LINK then call DokanLoad;
   DokanInit;
   status := DokanMain(@dokanOptions, @dokanOperations);
   DokanShutdown;
+  //if defined Dokan.pas DOKAN_EXPLICIT_LINK then call DokanFree
   case (status) of
     DOKAN_SUCCESS:
       Writeln(ErrOutput, 'Success');

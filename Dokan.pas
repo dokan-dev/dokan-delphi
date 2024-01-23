@@ -1,7 +1,7 @@
 (*
-  Dokan API wrapper for Delphi based on Release 2.0.5.1000
-  https://github.com/dokan-dev/dokany/releases/tag/v2.0.5.1000
-  Copyright (C) 2019 - 2023 Sven Harazim
+  Dokan API wrapper for Delphi based on Release 2.0.6.1000
+  https://github.com/dokan-dev/dokany/releases/tag/v2.0.6.1000
+  Copyright (C) 2019 - 2024 Sven Harazim
 
   Dokan : user-mode file system library for Windows
 
@@ -406,8 +406,8 @@ var
   DokanLibHandle: HMODULE = 0;
   DokanInit: procedure; stdcall = nil;
   DokanShutdown: procedure; stdcall = nil;
-  DokanMain: function (Options: DOKAN_OPTIONS; Operations: DOKAN_OPERATIONS): Integer; stdcall = nil;
-  DokanCreateFileSystem: function (DokanOptions : DOKAN_OPTIONS; DokanOperations : DOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall = nil;
+  DokanMain: function (Options: PDOKAN_OPTIONS; Operations: PDOKAN_OPERATIONS): Integer; stdcall = nil;
+  DokanCreateFileSystem: function (DokanOptions : PDOKAN_OPTIONS; DokanOperations : PDOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall = nil;
   DokanIsFileSystemRunning: function (DokanInstance : DOKAN_HANDLE) : BOOL; stdcall = nil;
   DokanWaitForFileSystemClosed: function (DokanInstance : DOKAN_HANDLE; dwMilliseconds : DWORD) : DWORD; stdcall = nil;
   DokanCloseHandle: procedure (DokanInstance : DOKAN_HANDLE); stdcall = nil;
@@ -423,11 +423,11 @@ var
   DokanMapKernelToUserCreateFileFlags: procedure (DesiredAccess: ACCESS_MASK; FileAttributes, CreateOptions,
     CreateDisposition: ULONG;outDesiredAccess: PACCESS_MASK; outFileAttributesAndFlags,
     outCreationDisposition: PDWORD); stdcall = nil;
-  DokanNotifyCreate: function (FilePath: LPCWSTR; IsDirectory : BOOL) : BOOL; stdcall = nil;
+  DokanNotifyCreate: function (DokanInstance : DOKAN_HANDLE; FilePath: LPCWSTR; IsDirectory : BOOL) : BOOL; stdcall = nil;
   DokanNotifyDelete: function (DokanInstance : DOKAN_HANDLE; FilePath : LPCWSTR; IsDirectory : BOOL) : BOOL; stdcall = nil;
-  DokanNotifyUpdate: function (FilePath : LPCWSTR) : BOOL; stdcall = nil;
-  DokanNotifyXAttrUpdate: function (FilePath : LPCWSTR) : BOOL; stdcall = nil;
-  DokanNotifyRename: function (OldPath: LPCWSTR; NewPath : LPCWSTR; IsDirectory : BOOL;
+  DokanNotifyUpdate: function (DokanInstance : DOKAN_HANDLE; FilePath : LPCWSTR) : BOOL; stdcall = nil;
+  DokanNotifyXAttrUpdate: function (DokanInstance : DOKAN_HANDLE; FilePath : LPCWSTR) : BOOL; stdcall = nil;
+  DokanNotifyRename: function (DokanInstance : DOKAN_HANDLE; OldPath: LPCWSTR; NewPath : LPCWSTR; IsDirectory : BOOL;
     IsInSameDirectory: BOOL) : BOOL; stdcall = nil;
   DokanNtStatusFromWin32: function (Error: DWORD): NTSTATUS; stdcall = nil;
 

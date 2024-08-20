@@ -1,6 +1,6 @@
 (*
-  Dokan API wrapper for Delphi based on Release 2.0.6.1000
-  https://github.com/dokan-dev/dokany/releases/tag/v2.0.6.1000
+  Dokan API wrapper for Delphi based on Release 2.2.0.1000
+  https://github.com/dokan-dev/dokany/releases/tag/v2.2.0.1000
   Copyright (C) 2019 - 2024 Sven Harazim
 
   Dokan : user-mode file system library for Windows
@@ -44,7 +44,7 @@ const
   DokanLibrary = 'dokan2.dll';
 
   //The current Dokan version (200 means ver 2.0.0).
-  DOKAN_VERSION = 206;
+  DOKAN_VERSION = 220;
   //Minimum Dokan version (ver 2.0.0) accepted
   DOKAN_MINIMUM_COMPATIBLE_VERSION = 200;
 
@@ -68,12 +68,15 @@ const
   //Use mount manager
   DOKAN_OPTION_MOUNT_MANAGER = 64;
   //Mount the drive on current session only
+  //Note: As Windows process only have on sessionID which is here used to define what is the current session,
+  //impersonation will not work if someone attend to mount for a user from another one (like system service).
+  //See issue #1196
   DOKAN_OPTION_CURRENT_SESSION = 128;
   //Enable Lockfile/Unlockfile operations. Otherwise Dokan will take care of it
   DOKAN_OPTION_FILELOCK_USER_MODE = 256;
   //Enable Case sensitive path.
   //By default all path are case insensitive.
-  //For case sensitive: \dir\File & \diR\file are different files
+  //For case sensitive: \dir\File & \diR\\file are different files
   //but for case insensitive they are the same.
   DOKAN_OPTION_CASE_SENSITIVE = 512;
   //Allows unmounting of network drive via explorer */
@@ -88,6 +91,7 @@ const
 
 type
   DOKAN_HANDLE = THandle;
+  HANDLE = THandle;
 
   //Dokan mount options used to describe Dokan device behavior.
   _DOKAN_OPTIONS = record
@@ -95,7 +99,7 @@ type
     SingleThread: ByteBool;       //Only use a single thread to process events. This is highly not recommended as can easily create a bottleneck.
     Options: ULONG;           //Features enabled for the mount. See \ref DOKAN_OPTION.
     GlobalContext: ULONG64;   //FileSystem can store anything here.
-    MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or a folder path "C:\mount\dokan" on a NTFS partition.
+    MountPoint: LPCWSTR;      //Mount point. It can be a driver letter like "M:\" or an existing empty folder path "C:\mount\dokan" on a NTFS partition. */
     UNCName: LPCWSTR;         //UNC Name for the Network Redirector
     Timeout: ULONG;           //Max timeout in milliseconds of each request before Dokan gives up to wait events to complete. The default timeout value is 15 seconds.
     AllocationUnitSize: ULONG;//Allocation Unit Size of the volume. This will affect the file size.
@@ -410,6 +414,8 @@ var
   DokanCreateFileSystem: function (DokanOptions : PDOKAN_OPTIONS; DokanOperations : PDOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall = nil;
   DokanIsFileSystemRunning: function (DokanInstance : DOKAN_HANDLE) : BOOL; stdcall = nil;
   DokanWaitForFileSystemClosed: function (DokanInstance : DOKAN_HANDLE; dwMilliseconds : DWORD) : DWORD; stdcall = nil;
+  DokanRegisterWaitForFileSystemClosed: function (DokanInstance : DOKAN_HANDLE; var WaitHandle : PHANDLE; Callback : TWaitOrTimerCallback; Context : PVOID; dwMilliseconds : DWORD): BOOL; stdcall = nil;
+  DokanUnregisterWaitForFileSystemClosed: function (WaitHandle : HANDLE; WaitForCallbacks : BOOL): BOOL; stdcall = nil;
   DokanCloseHandle: procedure (DokanInstance : DOKAN_HANDLE); stdcall = nil;
   DokanUnmount: function (DriveLetter: WCHAR): BOOL; stdcall = nil;
   DokanRemoveMountPoint: function (MountPoint: LPCWSTR): BOOL; stdcall = nil;
@@ -442,6 +448,8 @@ function DokanMain(Options: PDOKAN_OPTIONS; Operations: PDOKAN_OPERATIONS): Inte
 function DokanCreateFileSystem(DokanOptions : PDOKAN_OPTIONS; DokanOperations : PDOKAN_OPERATIONS; var DokanInstance : DOKAN_HANDLE) : Integer; stdcall;
 function DokanIsFileSystemRunning(DokanInstance : DOKAN_HANDLE) : BOOL; stdcall;
 function DokanWaitForFileSystemClosed(DokanInstance : DOKAN_HANDLE; dwMilliseconds : DWORD) : DWORD; stdcall;
+function DokanRegisterWaitForFileSystemClosed(DokanInstance : DOKAN_HANDLE; var WaitHandle : PHANDLE; Callback : TWaitOrTimerCallback; Context : PVOID; dwMilliseconds : DWORD): BOOL; stdcall;
+function DokanUnregisterWaitForFileSystemClosed(WaitHandle : HANDLE; WaitForCallbacks : BOOL): BOOL; stdcall;
 procedure DokanCloseHandle(DokanInstance : DOKAN_HANDLE); stdcall;
 function DokanUnmount(DriveLetter: WCHAR): BOOL; stdcall;
 function DokanRemoveMountPoint(MountPoint: LPCWSTR): BOOL; stdcall;
@@ -496,6 +504,8 @@ begin
   DokanCreateFileSystem := GetProc('DokanCreateFileSystem');
   DokanIsFileSystemRunning := GetProc('DokanIsFileSystemRunning');
   DokanWaitForFileSystemClosed := GetProc('DokanWaitForFileSystemClosed');
+  DokanRegisterWaitForFileSystemClosed := GetProc('DokanRegisterWaitForFileSystemClosed');
+  DokanUnregisterWaitForFileSystemClosed := GetProc('DokanUnregisterWaitForFileSystemClosed');
   DokanCloseHandle := GetProc('DokanCloseHandle');
   DokanUnmount := GetProc('DokanUnmount');
   DokanRemoveMountPoint := GetProc('DokanRemoveMountPoint');
@@ -530,6 +540,8 @@ begin
   DokanCreateFileSystem := nil;
   DokanIsFileSystemRunning := nil;
   DokanWaitForFileSystemClosed := nil;
+  DokanRegisterWaitForFileSystemClosed := nil;
+  DokanUnregisterWaitForFileSystemClosed := nil;
   DokanCloseHandle := nil;
   DokanUnmount := nil;
   DokanRemoveMountPoint := nil;
@@ -561,6 +573,8 @@ function DokanMain; external DokanLibrary;
 function DokanCreateFileSystem; external DokanLibrary;
 function DokanIsFileSystemRunning; external DokanLibrary;
 function DokanWaitForFileSystemClosed; external DokanLibrary;
+function DokanRegisterWaitForFileSystemClosed; external DokanLibrary;
+function DokanUnregisterWaitForFileSystemClosed; external DokanLibrary;
 procedure DokanCloseHandle; external DokanLibrary;
 function DokanUnmount; external DokanLibrary;
 function DokanRemoveMountPoint; external DokanLibrary;

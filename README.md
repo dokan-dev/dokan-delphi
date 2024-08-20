@@ -15,6 +15,6 @@ Delphi/FreePascal and Dokan library
 ## Supported Dokan Version
 https://github.com/dokan-dev/dokany
 
-2.0.6.1000
+2.2.0.1000
 
-https://github.com/dokan-dev/dokany/releases/tag/v2.0.6.1000
+https://github.com/dokan-dev/dokany/releases/tag/v2.2.0.1000
